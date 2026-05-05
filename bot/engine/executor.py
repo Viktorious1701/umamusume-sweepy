@@ -4,6 +4,7 @@ import traceback
 import psutil
 import os
 import gc
+import random
 
 import bot.base.log as logger
 import cv2
@@ -39,11 +40,13 @@ class Executor:
         psutil.Process().cpu_affinity(list(range(CONFIG.bot.auto.cpu_alloc)))
         self.detect_ui_results_write_lock = threading.Lock()
         self.detect_ui_results = []
-        self.executor = ThreadPoolExecutor(max_workers=CONFIG.bot.auto.cpu_alloc)
+        self.executor = ThreadPoolExecutor(
+            max_workers=CONFIG.bot.auto.cpu_alloc)
 
     def ensure_pool(self):
         if self.executor is None or getattr(self.executor, "_shutdown", False):
-            self.executor = ThreadPoolExecutor(max_workers=CONFIG.bot.auto.cpu_alloc)
+            self.executor = ThreadPoolExecutor(
+                max_workers=CONFIG.bot.auto.cpu_alloc)
 
     def cancel_futures(self, futures):
         for f in futures:
@@ -105,9 +108,11 @@ class Executor:
         self.ensure_pool()
         if self.executor is None or getattr(self.executor, "_shutdown", False):
             return NOT_FOUND_UI
-        remaining = [ui for ui in ui_list if ui is not prev_ui] if prev_ui else ui_list
+        remaining = [
+            ui for ui in ui_list if ui is not prev_ui] if prev_ui else ui_list
         try:
-            futures = {self.executor.submit(self.detect_ui_sub, ui, target): ui for ui in remaining}
+            futures = {self.executor.submit(
+                self.detect_ui_sub, ui, target): ui for ui in remaining}
         except RuntimeError as e:
             if "interpreter shutdown" in str(e).lower():
                 return NOT_FOUND_UI
@@ -159,13 +164,14 @@ class Executor:
 
             task.task_status = TaskStatus.TASK_STATUS_RUNNING
             task.start_task()
-            task.task_start_time = time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(time.time()))
+            task.task_start_time = time.strftime(
+                '%Y-%m-%d %H:%M:%S', time.localtime(time.time()))
 
             log.debug("Starting: "+manifest.app_package_name)
-            ctx.ctrl.start_app(manifest.app_package_name, manifest.app_activity_name)
+            ctx.ctrl.start_app(manifest.app_package_name,
+                               manifest.app_activity_name)
             ctx.ctrl.click(355, 1200, "task start")
-            
-            
+
             def screen_watchdog():
                 last_img = None
                 unchanged = 0
@@ -187,7 +193,7 @@ class Executor:
                             watchdog_threshold = int(get_watchdog_threshold())
                         except Exception:
                             watchdog_threshold = 3
-                            update_watchdog = None 
+                            update_watchdog = None
 
                         img = controller.get_screen(to_gray=True)
                         if img is None:
@@ -197,9 +203,11 @@ class Executor:
                                     update_watchdog(unchanged)
                             except Exception:
                                 pass
-                            print(f"{unchanged}/{watchdog_threshold}", flush=True)
+                            print(f"{unchanged}/{watchdog_threshold}",
+                                  flush=True)
                             try:
-                                log.info(f"watchdog {unchanged}/{watchdog_threshold}")
+                                log.info(
+                                    f"watchdog {unchanged}/{watchdog_threshold}")
                             except Exception:
                                 pass
                         else:
@@ -214,7 +222,8 @@ class Executor:
                                     pass
                                 print(f"0/{watchdog_threshold}", flush=True)
                                 try:
-                                    log.info(f"watchdog 0/{watchdog_threshold}")
+                                    log.info(
+                                        f"watchdog 0/{watchdog_threshold}")
                                 except Exception:
                                     pass
                                 continue
@@ -235,9 +244,11 @@ class Executor:
                                         update_watchdog(unchanged)
                                 except Exception:
                                     pass
-                                print(f"{unchanged}/{watchdog_threshold}", flush=True)
+                                print(
+                                    f"{unchanged}/{watchdog_threshold}", flush=True)
                                 try:
-                                    log.info(f"watchdog {unchanged}/{watchdog_threshold}")
+                                    log.info(
+                                        f"watchdog {unchanged}/{watchdog_threshold}")
                                 except Exception:
                                     pass
                             else:
@@ -249,15 +260,18 @@ class Executor:
                                     pass
                                 print(f"0/{watchdog_threshold}", flush=True)
                                 try:
-                                    log.info(f"watchdog 0/{watchdog_threshold}")
+                                    log.info(
+                                        f"watchdog 0/{watchdog_threshold}")
                                 except Exception:
                                     pass
                             last_img = cur
 
                         if unchanged >= watchdog_threshold:
-                            print(f"{watchdog_threshold}/{watchdog_threshold} restarting app", flush=True)
+                            print(
+                                f"{watchdog_threshold}/{watchdog_threshold} restarting app", flush=True)
                             try:
-                                log.info(f"watchdog {watchdog_threshold}/{watchdog_threshold} restarting app")
+                                log.info(
+                                    f"watchdog {watchdog_threshold}/{watchdog_threshold} restarting app")
                             except Exception:
                                 pass
                             try:
@@ -265,7 +279,8 @@ class Executor:
                                 u2c.INPUT_BLOCKED = True
                                 for attempt in range(3):
                                     try:
-                                        controller.execute_adb_shell("shell am force-stop com.cygames.umamusume", True)
+                                        controller.execute_adb_shell(
+                                            "shell am force-stop com.cygames.umamusume", True)
                                         break
                                     except Exception:
                                         time.sleep(1.0)
@@ -273,7 +288,8 @@ class Executor:
                                 try:
                                     controller.recover_home_and_reopen()
                                 except Exception:
-                                    controller.start_app(manifest.app_package_name, manifest.app_activity_name)
+                                    controller.start_app(
+                                        manifest.app_package_name, manifest.app_activity_name)
                                 time.sleep(2.0)
                                 try:
                                     controller.trigger_decision_reset = True
@@ -304,15 +320,48 @@ class Executor:
                         unchanged = 0
                         last_img = None
 
-            watchdog_thread = threading.Thread(target=screen_watchdog, args=(), daemon=True)
+            watchdog_thread = threading.Thread(
+                target=screen_watchdog, args=(), daemon=True)
             watchdog_thread.start()
 
             last_frame_hash = None
             dedup_skip_count = 0
+
+            # --- Humanizer State Variables ---
+            humanizer_next_delay = random.uniform(15.0, 45.0)
+            last_humanizer_time = time.time()
+
             while self.active:
                 if task.task_status == TaskStatus.TASK_STATUS_RUNNING:
+
+                    # --- Humanizer Execution Logic ---
+                    if time.time() - last_humanizer_time > humanizer_next_delay:
+                        last_humanizer_time = time.time()
+                        humanizer_next_delay = random.uniform(20.0, 55.0)
+                        try:
+                            # 75% chance to tap a safe area (y: 180-280 is generally sky/background or dialogue skip area)
+                            # 25% chance to perform a tiny random swipe
+                            if random.random() < 0.75:
+                                rx = random.randint(100, 620)
+                                ry = random.randint(180, 280)
+                                ctx.ctrl.tap(rx, ry, 0)
+                                log.debug(
+                                    f"Humanizer: random safe tap at ({rx}, {ry})")
+                            else:
+                                sx = random.randint(200, 500)
+                                sy = random.randint(400, 700)
+                                ex = sx + random.randint(-40, 40)
+                                ey = sy + random.randint(-40, 40)
+                                dur = int(random.uniform(150, 350))
+                                ctx.ctrl.execute_adb_shell(
+                                    f"shell input swipe {sx} {sy} {ex} {ey} {dur}", True)
+                                log.debug(f"Humanizer: random safe swipe")
+                        except Exception as e:
+                            log.debug(f"Humanizer error: {e}")
+
                     if check_and_reset_timeout():
-                        log.warning("Recognition timeout detected - restarting decision making")
+                        log.warning(
+                            "Recognition timeout detected - restarting decision making")
                         try:
                             ctx.current_screen = None
                         except Exception:
@@ -321,7 +370,7 @@ class Executor:
                         dedup_skip_count = 0
                         time.sleep(0.5)
                         continue
-                    
+
                     ctx.current_screen = ctx.ctrl.get_screen()
                     if ctx.current_screen is None:
                         log.debug("No image detected")
@@ -329,7 +378,8 @@ class Executor:
                         dedup_skip_count = 0
                         time.sleep(1)
                         continue
-                    ctx.current_screen_gray = cv2.cvtColor(ctx.current_screen, cv2.COLOR_BGR2GRAY)
+                    ctx.current_screen_gray = cv2.cvtColor(
+                        ctx.current_screen, cv2.COLOR_BGR2GRAY)
                     frame_sample = ctx.current_screen_gray[::8, ::8]
                     frame_hash = hash(frame_sample.tobytes())
                     if frame_hash == last_frame_hash and ctx.current_ui is not None and ctx.current_ui is not NOT_FOUND_UI:
@@ -343,7 +393,8 @@ class Executor:
                         dedup_skip_count = 0
                     last_frame_hash = frame_hash
                     ctx.prev_ui = ctx.current_ui
-                    ctx.current_ui = self.detect_ui(ui_list, ctx.current_screen_gray, prev_ui=ctx.prev_ui)
+                    ctx.current_ui = self.detect_ui(
+                        ui_list, ctx.current_screen_gray, prev_ui=ctx.prev_ui)
                     log.debug("current_ui:" + ctx.current_ui.ui_name)
                     if before_hook is not None:
                         before_hook(ctx)
@@ -351,7 +402,8 @@ class Executor:
                     if after_hook is not None:
                         after_hook(ctx)
                     if ctx.is_task_finish():
-                        task.end_task(TaskStatus.TASK_STATUS_SUCCESS, EndTaskReason.COMPLETE)
+                        task.end_task(TaskStatus.TASK_STATUS_SUCCESS,
+                                      EndTaskReason.COMPLETE)
                     try:
                         ctx.current_screen = None
                         ctx.current_screen_gray = None
@@ -360,24 +412,31 @@ class Executor:
                 else:
                     break
                 try:
-                    sleep_ms = int(os.getenv("UAT_EXECUTOR_LOOP_SLEEP_MS", "80"))
+                    sleep_ms = int(
+                        os.getenv("UAT_EXECUTOR_LOOP_SLEEP_MS", "80"))
                     time.sleep(max(0.05, sleep_ms / 1000.0))
                 except Exception:
                     time.sleep(0.08)
         except Exception:
-            task.end_task(TaskStatus.TASK_STATUS_FAILED, EndTaskReason.SYSTEM_ERROR)
+            task.end_task(TaskStatus.TASK_STATUS_FAILED,
+                          EndTaskReason.SYSTEM_ERROR)
             tb = traceback.format_exc()
-            log.error("Task failed with unhandled exception:\n" + tb + "\nReason: " + str(EndTaskReason.SYSTEM_ERROR.value))
+            log.error("Task failed with unhandled exception:\n" + tb +
+                      "\nReason: " + str(EndTaskReason.SYSTEM_ERROR.value))
             traceback.print_exc()
         if not self.active:
-            task.end_task(TaskStatus.TASK_STATUS_INTERRUPT, EndTaskReason.MANUAL_ABORTED)
+            task.end_task(TaskStatus.TASK_STATUS_INTERRUPT,
+                          EndTaskReason.MANUAL_ABORTED)
         elif task.task_status == TaskStatus.TASK_STATUS_INTERRUPT:
-            task.end_task(TaskStatus.TASK_STATUS_INTERRUPT, EndTaskReason.MANUAL_ABORTED)
+            task.end_task(TaskStatus.TASK_STATUS_INTERRUPT,
+                          EndTaskReason.MANUAL_ABORTED)
             self.active = False
         else:
             self.active = False
-        task.end_task_time = time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(time.time()))
-        push_system_notification("任务结束", str(getattr(getattr(task, 'end_task_reason', None), 'value', '')), 10)
+        task.end_task_time = time.strftime(
+            '%Y-%m-%d %H:%M:%S', time.localtime(time.time()))
+        push_system_notification("任务结束", str(
+            getattr(getattr(task, 'end_task_reason', None), 'value', '')), 10)
         controller.destroy()
         self.close_pool()
         try:

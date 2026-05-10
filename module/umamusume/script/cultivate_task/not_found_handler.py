@@ -36,6 +36,24 @@ def script_not_found_ui(ctx: UmamusumeContext):
         if has_home_coin(ctx):
             return
 
+        # --- NEW: Check for Career Playthrough Difficulty Select ---
+        try:
+            img_gray_full = getattr(ctx, 'current_screen_gray', None)
+            if img_gray_full is None:
+                img_gray_full = cv2.cvtColor(
+                    ctx.current_screen, cv2.COLOR_BGR2GRAY)
+
+            header_area = img_gray_full[10:90, 80:640]
+            header_text = ocr_line(header_area).lower()
+            if "difficulty select" in header_text or "playthrough" in header_text:
+                log.info("Career Difficulty Select detected. Clicking Confirm.")
+                # Click the Confirm button at the bottom right
+                ctx.ctrl.click(540, 1180, "Confirm Difficulty")
+                return
+        except Exception as e:
+            log.debug(f"Difficulty Select check failed: {e}")
+        # ---------------------------------------------------------
+
         try:
             from module.umamusume.asset.template import REF_NEXT, REF_NEXT2
             img_gray_full = getattr(ctx, 'current_screen_gray', None)
@@ -58,11 +76,14 @@ def script_not_found_ui(ctx: UmamusumeContext):
             from module.umamusume.asset.template import UI_CULTIVATE_RACE_LIST_2
             img_gray_full = getattr(ctx, 'current_screen_gray', None)
             if img_gray_full is None:
-                img_gray_full = cv2.cvtColor(ctx.current_screen, cv2.COLOR_BGR2GRAY)
+                img_gray_full = cv2.cvtColor(
+                    ctx.current_screen, cv2.COLOR_BGR2GRAY)
             x1, y1, x2, y2 = 238, 525, 300, 588
             h, w = img_gray_full.shape[:2]
-            x1c = max(0, min(w, x1)); x2c = max(0, min(w, x2))
-            y1c = max(0, min(h, y1)); y2c = max(0, min(h, y2))
+            x1c = max(0, min(w, x1))
+            x2c = max(0, min(w, x2))
+            y1c = max(0, min(h, y1))
+            y2c = max(0, min(h, y2))
             roi = img_gray_full[y1c:y2c, x1c:x2c]
             res = image_match(roi, UI_CULTIVATE_RACE_LIST_2)
             if res.find_match:
@@ -72,14 +93,14 @@ def script_not_found_ui(ctx: UmamusumeContext):
                 return
         except Exception as e:
             log.debug(f"Race List ROI check failed: {e}")
-                
+
         try:
             from module.umamusume.asset.template import UI_CULTIVATE_RESULT_1
-            
+
             img = ctx.current_screen
             img_gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
             result = image_match(img_gray, UI_CULTIVATE_RESULT_1)
-            
+
             if result.find_match:
                 if hasattr(ctx, 'fallback_click_count'): ctx.fallback_click_count = 0
                 log.info("Cultivate Result 1 template matched! Clicking confirm button")
@@ -87,25 +108,26 @@ def script_not_found_ui(ctx: UmamusumeContext):
                 return
             else:
                 log.debug("Cultivate Result 1 template not found")
-                
+
         except Exception as e:
             log.debug(f"Template matching failed: {str(e)}")
-        
+
         try:
             img = ctx.current_screen
             title_area = img[200:400, 100:620]
             title_text = ocr_line(title_area).lower()
-            
+
             log.debug(f"OCR detected text: '{title_text[:100]}...'")
-            
-            result_keywords = ['rewards', 'result', 'cultivation', 'complete', 'finish']
+
+            result_keywords = ['rewards', 'result',
+                               'cultivation', 'complete', 'finish']
             if any(keyword in title_text for keyword in result_keywords):
                 if hasattr(ctx, 'fallback_click_count'): ctx.fallback_click_count = 0
                 log.info(f"Potential cultivation result detected: '{title_text[:50]}...'")
                 log.info("Attempting to click cultivation result confirm button")
                 ctx.ctrl.click_by_point(CULTIVATE_RESULT_CONFIRM)
                 return
-                
+
             bond_area = img[400:600, 100:620]
             bond_text = ocr_line(bond_area).lower()
             log.debug(f"Bond area OCR: '{bond_text[:100]}...'")
@@ -115,25 +137,26 @@ def script_not_found_ui(ctx: UmamusumeContext):
                 log.info("Attempting to click cultivation result confirm button")
                 ctx.ctrl.click_by_point(CULTIVATE_RESULT_CONFIRM)
                 return
-                
+
         except Exception as e:
             log.debug(f"Cultivation result detection failed: {str(e)}")
-    
+
     try:
         img = ctx.current_screen
         if img is not None:
             img_gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-            
+
             title_area = img_gray[200:400, 100:620]
             title_text = ocr_line(title_area).lower()
-            
+
             middle_area = img_gray[800:1000, 200:560]
             middle_text = ocr_line(middle_area).lower()
-            
-            goal_keywords = ['goal', 'complete', 'achieved', 'failed', 'next', 'finish', 'target', 'objective']
-            
+
+            goal_keywords = ['goal', 'complete', 'achieved',
+                             'failed', 'next', 'finish', 'target', 'objective']
+
             combined_text = f"{title_text} {middle_text}"
-            
+
             if any(keyword in combined_text for keyword in goal_keywords):
                 if hasattr(ctx, 'fallback_click_count'): ctx.fallback_click_count = 0
                 log.info(f"Fallback goal screen detected: '{combined_text[:50]}...'")
@@ -141,10 +164,12 @@ def script_not_found_ui(ctx: UmamusumeContext):
                 if any(word in combined_text for word in ['complete', 'achieved']):
                     try:
                         from module.umamusume.asset.template import REF_NEXT
-                        img_full = getattr(ctx, 'current_screen_gray', None) or cv2.cvtColor(ctx.current_screen, cv2.COLOR_BGR2GRAY)
+                        img_full = getattr(ctx, 'current_screen_gray', None) or cv2.cvtColor(
+                            ctx.current_screen, cv2.COLOR_BGR2GRAY)
                         next_match = image_match(img_full, REF_NEXT)
                         if next_match.find_match:
-                            ctx.ctrl.click(next_match.center_point[0], next_match.center_point[1], "REF_NEXT")
+                            ctx.ctrl.click(
+                                next_match.center_point[0], next_match.center_point[1], "REF_NEXT")
                             return
                     except Exception:
                         pass
@@ -153,10 +178,12 @@ def script_not_found_ui(ctx: UmamusumeContext):
                 elif any(word in combined_text for word in ['failed']):
                     try:
                         from module.umamusume.asset.template import REF_NEXT
-                        img_full = getattr(ctx, 'current_screen_gray', None) or cv2.cvtColor(ctx.current_screen, cv2.COLOR_BGR2GRAY)
+                        img_full = getattr(ctx, 'current_screen_gray', None) or cv2.cvtColor(
+                            ctx.current_screen, cv2.COLOR_BGR2GRAY)
                         next_match = image_match(img_full, REF_NEXT)
                         if next_match.find_match:
-                            ctx.ctrl.click(next_match.center_point[0], next_match.center_point[1], "REF_NEXT")
+                            ctx.ctrl.click(
+                                next_match.center_point[0], next_match.center_point[1], "REF_NEXT")
                             return
                     except Exception:
                         pass
@@ -165,10 +192,12 @@ def script_not_found_ui(ctx: UmamusumeContext):
                 elif any(word in combined_text for word in ['next']):
                     try:
                         from module.umamusume.asset.template import REF_NEXT
-                        img_full = getattr(ctx, 'current_screen_gray', None) or cv2.cvtColor(ctx.current_screen, cv2.COLOR_BGR2GRAY)
+                        img_full = getattr(ctx, 'current_screen_gray', None) or cv2.cvtColor(
+                            ctx.current_screen, cv2.COLOR_BGR2GRAY)
                         next_match = image_match(img_full, REF_NEXT)
                         if next_match.find_match:
-                            ctx.ctrl.click(next_match.center_point[0], next_match.center_point[1], "REF_NEXT")
+                            ctx.ctrl.click(
+                                next_match.center_point[0], next_match.center_point[1], "REF_NEXT")
                             return
                     except Exception:
                         pass
@@ -178,7 +207,7 @@ def script_not_found_ui(ctx: UmamusumeContext):
                     log.info(f"Generic goal screen - using standard position")
                     ctx.ctrl.click(370, 1110, "Generic goal confirmation")
                     return
-            
+
     except Exception as e:
         log.debug(f"Goal detection fallback failed: {str(e)}")
     try:
@@ -196,7 +225,8 @@ def script_not_found_ui(ctx: UmamusumeContext):
 
     try:
         from module.umamusume.asset.template import REF_EDIT_TEAM
-        img_gray = getattr(ctx, 'current_screen_gray', None) or cv2.cvtColor(ctx.current_screen, cv2.COLOR_BGR2GRAY)
+        img_gray = getattr(ctx, 'current_screen_gray', None) or cv2.cvtColor(
+            ctx.current_screen, cv2.COLOR_BGR2GRAY)
         edit_team_match = image_match(img_gray, REF_EDIT_TEAM)
         if edit_team_match.find_match:
             if hasattr(ctx, 'fallback_click_count'): ctx.fallback_click_count = 0
@@ -209,7 +239,8 @@ def script_not_found_ui(ctx: UmamusumeContext):
 
     try:
         from module.umamusume.asset.template import REF_TP
-        img_gray = getattr(ctx, 'current_screen_gray', None) or cv2.cvtColor(ctx.current_screen, cv2.COLOR_BGR2GRAY)
+        img_gray = getattr(ctx, 'current_screen_gray', None) or cv2.cvtColor(
+            ctx.current_screen, cv2.COLOR_BGR2GRAY)
         tp_match = image_match(img_gray, REF_TP)
         if tp_match.find_match:
             if hasattr(ctx, 'fallback_click_count'): ctx.fallback_click_count = 0
@@ -222,12 +253,25 @@ def script_not_found_ui(ctx: UmamusumeContext):
         if (hasattr(ctx, 'cultivate_detail') and hasattr(ctx.cultivate_detail, 'scenario')
                 and ctx.cultivate_detail.scenario.scenario_type() == ScenarioType.SCENARIO_TYPE_MANT):
             from module.umamusume.asset.template import REF_MANT_FINAL_END
-            img_gray = getattr(ctx, 'current_screen_gray', None) or cv2.cvtColor(ctx.current_screen, cv2.COLOR_BGR2GRAY)
+            img_gray = getattr(ctx, 'current_screen_gray', None) or cv2.cvtColor(
+                ctx.current_screen, cv2.COLOR_BGR2GRAY)
             final_match = image_match(img_gray, REF_MANT_FINAL_END)
             if final_match.find_match:
                 if hasattr(ctx, 'fallback_click_count'): ctx.fallback_click_count = 0
                 ctx.ctrl.click(360, 1110, "MANT final end Next")
                 return
+    except Exception:
+        pass
+
+    try:
+        from module.umamusume.asset.template import BTN_CLOSE
+        img_gray = getattr(ctx, 'current_screen_gray', None) or cv2.cvtColor(
+            ctx.current_screen, cv2.COLOR_BGR2GRAY)
+        close_match = image_match(img_gray, BTN_CLOSE)
+        if close_match.find_match:
+            ctx.ctrl.click(
+                close_match.center_point[0], close_match.center_point[1], "BTN_CLOSE")
+            return
     except Exception:
         pass
 

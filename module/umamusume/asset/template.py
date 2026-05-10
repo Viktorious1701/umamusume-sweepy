@@ -1,4 +1,4 @@
-﻿from bot.base.resource import Template
+from bot.base.resource import Template
 from bot.base.common import Area, ImageMatchConfig
 from module.umamusume.define import ScenarioType
 
@@ -165,7 +165,12 @@ MOTIVATION_LIST = [REF_MOTIVATION_1, REF_MOTIVATION_2, REF_MOTIVATION_3, REF_MOT
 REF_CULTIVATE_SUPPORT_CARD_EMPTY = Template("CULTIVATE_SUPPORT_CARD_EMPTY", UMAMUSUME_REF_TEMPLATE_PATH)
 REF_FOLLOW_SUPPORT_CARD_DETECT_LABEL = Template("FOLLOW_SUPPORT_CARD_DETECT_LABEL", UMAMUSUME_REF_TEMPLATE_PATH)
 REF_BORROW_CARD = Template("borrow_card", UMAMUSUME_REF_TEMPLATE_PATH)
-REF_SELECTOR = Template("SELECTOR", UMAMUSUME_REF_TEMPLATE_PATH, ImageMatchConfig(match_accuracy=0.72))
+REF_DIALOGUE_1 = Template("dialogue1", UMAMUSUME_REF_TEMPLATE_PATH, ImageMatchConfig(match_accuracy=0.70))
+REF_DIALOGUE_2 = Template("dialogue2", UMAMUSUME_REF_TEMPLATE_PATH, ImageMatchConfig(match_accuracy=0.70))
+REF_DIALOGUE_3 = Template("dialogue3", UMAMUSUME_REF_TEMPLATE_PATH, ImageMatchConfig(match_accuracy=0.70))
+REF_DIALOGUE_4 = Template("dialogue4", UMAMUSUME_REF_TEMPLATE_PATH, ImageMatchConfig(match_accuracy=0.70))
+REF_DIALOGUE_5 = Template("dialogue5", UMAMUSUME_REF_TEMPLATE_PATH, ImageMatchConfig(match_accuracy=0.70))
+REF_DIALOGUE_SELECTOR = [REF_DIALOGUE_1, REF_DIALOGUE_2, REF_DIALOGUE_3, REF_DIALOGUE_4, REF_DIALOGUE_5]
 REF_TRAIN_BTN = Template("train_btn", UMAMUSUME_REF_TEMPLATE_PATH)
 REF_RACE_LIST = Template("race_list", UMAMUSUME_REF_TEMPLATE_PATH, ImageMatchConfig(match_area=Area(23, 7, 109, 31), match_accuracy=0.83))
 REF_RACE_LIST_GOAL_RACE = Template("RACE_LIST_GOAL_RACE", UMAMUSUME_REF_TEMPLATE_PATH)
@@ -198,6 +203,7 @@ REF_RACE_END = Template("race_end", UMAMUSUME_REF_TEMPLATE_PATH)
 REF_RACE_END2 = Template("race_end2", UMAMUSUME_REF_TEMPLATE_PATH)
 REF_TEAM_SHOWDOWN = Template("team_showdown", UMAMUSUME_REF_TEMPLATE_PATH)
 REF_NEXT = Template("next", UMAMUSUME_REF_TEMPLATE_PATH, ImageMatchConfig(match_area=Area(0, 640, 720, 1280), match_accuracy=0.79))
+REF_NEXT_RIGHT = Template("next", UMAMUSUME_REF_TEMPLATE_PATH, ImageMatchConfig(match_area=Area(360, 640, 720, 1280), match_accuracy=0.79))
 REF_SEE_RESULTS = Template("see_results", UMAMUSUME_REF_TEMPLATE_PATH)
 REF_RESUME_CAREER = Template("resume_career", UMAMUSUME_REF_TEMPLATE_PATH, ImageMatchConfig(match_area=Area(548, 375, 632, 422)))
 REF_NEXT2 = Template("next2", UMAMUSUME_REF_TEMPLATE_PATH)
@@ -210,6 +216,8 @@ REF_EDIT_TEAM = Template("edit_team", UMAMUSUME_REF_TEMPLATE_PATH, ImageMatchCon
 REF_ENERGY = Template("energy", UMAMUSUME_REF_TEMPLATE_PATH, ImageMatchConfig(match_area=Area(163, 149, 229, 169)))
 
 REF_FULL_NRG = Template("fullNRG", UMAMUSUME_REF_TEMPLATE_PATH)
+
+REF_MANT_PLUS = Template("mant_plus", UMAMUSUME_REF_TEMPLATE_PATH)
 
 URA_DATE_1 = Template("URA_DATE_1", UMAMUSUME_REF_TEMPLATE_PATH)
 URA_DATE_2 = Template("URA_DATE_2", UMAMUSUME_REF_TEMPLATE_PATH)
@@ -232,8 +240,10 @@ REF_TRAINING_ITEMS_BTN = Template("training_items", UMAMUSUME_REF_TEMPLATE_PATH)
 REF_MANT_ON_SALE = Template("mant_on_sale", UMAMUSUME_REF_TEMPLATE_PATH, ImageMatchConfig(match_area=Area(392, 1062, 432, 1087)))
 REF_BLUE_LINE = Template("blue_line", UMAMUSUME_REF_TEMPLATE_PATH)
 REF_MANT_FINAL_END = Template("mant_final_end", UMAMUSUME_REF_TEMPLATE_PATH, ImageMatchConfig(match_area=Area(280, 10, 450, 90), match_accuracy=0.80))
+REF_MANT_RESET_CLOCK = Template("reset_clock", UMAMUSUME_REF_TEMPLATE_PATH)
 REF_MANT_SHOP_TITLE = Template("shop_title", UMAMUSUME_REF_MANT_SHOP_PATH, ImageMatchConfig(match_area=Area(17, 8, 78, 35)))
 REF_SHOP_MANT_CHECK = Template("shop_mant_check", UMAMUSUME_REF_MANT_SHOP_PATH, ImageMatchConfig(match_area=Area(23, 10, 74, 31), match_accuracy=0.83))
+REF_MANT_SHOP_CHECKMARK = Template("mant_shop_checkmark", UMAMUSUME_REF_MANT_SHOP_PATH)
 
 REF_MANT_REWARD_ITEMS = Template("items", UMAMUSUME_REF_TEMPLATE_PATH, ImageMatchConfig(match_area=Area(224, 797, 326, 817), match_accuracy=0.76))
 

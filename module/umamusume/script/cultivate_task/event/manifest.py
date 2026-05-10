@@ -84,7 +84,7 @@ def get_local_event_choice(ctx: UmamusumeContext, event_name: str) -> Union[int,
     if event_name in events_db:
         return calculate_optimal_choice_from_db(ctx, events_db[event_name])
 
-    def normalizeString(text: str) -> str:
+    def normalize_string(text: str) -> str:
         if not text:
             return ""
         t = unicodedata.normalize('NFKD', str(text))
@@ -93,28 +93,28 @@ def get_local_event_choice(ctx: UmamusumeContext, event_name: str) -> Union[int,
         t = " ".join(t.split())
         return t
 
-    query = normalizeString(event_name)
+    query = normalize_string(event_name)
 
-    norm_map = getattr(get_local_event_choice, "cacheNormalizedKeyMap", None)
+    norm_map = getattr(get_local_event_choice, "cache_normalized_key_map", None)
     if norm_map and query in norm_map:
         key = norm_map[query]
         return calculate_optimal_choice_from_db(ctx, events_db[key])
 
-    choices = getattr(get_local_event_choice, "cacheChoices", None)
-    source_cache = getattr(get_local_event_choice, "cacheSource", None)
-    norm_map = getattr(get_local_event_choice, "cacheNormalizedKeyMap", None)
+    choices = getattr(get_local_event_choice, "cache_choices", None)
+    source_cache = getattr(get_local_event_choice, "cache_source", None)
+    norm_map = getattr(get_local_event_choice, "cache_normalized_key_map", None)
 
     if choices is None or source_cache is not events_db or norm_map is None:
         norm_map = {}
         normalized_choices = []
         for original_key in events_db.keys():
-            normalized_key = normalizeString(original_key)
+            normalized_key = normalize_string(original_key)
             if normalized_key:
                 norm_map[normalized_key] = original_key
                 normalized_choices.append(normalized_key)
-        setattr(get_local_event_choice, "cacheChoices", normalized_choices)
-        setattr(get_local_event_choice, "cacheSource", events_db)
-        setattr(get_local_event_choice, "cacheNormalizedKeyMap", norm_map)
+        setattr(get_local_event_choice, "cache_choices", normalized_choices)
+        setattr(get_local_event_choice, "cache_source", events_db)
+        setattr(get_local_event_choice, "cache_normalized_key_map", norm_map)
         choices = normalized_choices
 
     if not query or not choices:
@@ -158,7 +158,7 @@ def get_local_event_choice_with_count(ctx: UmamusumeContext, event_name: str):
     if event_name in events_db:
         return _resolve(event_name)
 
-    def normalizeString(text: str) -> str:
+    def normalize_string(text: str) -> str:
         if not text:
             return ""
         t = unicodedata.normalize('NFKD', str(text))
@@ -167,26 +167,26 @@ def get_local_event_choice_with_count(ctx: UmamusumeContext, event_name: str):
         t = " ".join(t.split())
         return t
 
-    query = normalizeString(event_name)
+    query = normalize_string(event_name)
 
-    norm_map = getattr(get_local_event_choice, "cacheNormalizedKeyMap", None)
+    norm_map = getattr(get_local_event_choice, "cache_normalized_key_map", None)
     if norm_map and query in norm_map:
         return _resolve(norm_map[query])
 
-    choices = getattr(get_local_event_choice, "cacheChoices", None)
-    source_cache = getattr(get_local_event_choice, "cacheSource", None)
+    choices = getattr(get_local_event_choice, "cache_choices", None)
+    source_cache = getattr(get_local_event_choice, "cache_source", None)
 
     if choices is None or source_cache is not events_db or norm_map is None:
         norm_map = {}
         normalized_choices = []
         for original_key in events_db.keys():
-            normalized_key = normalizeString(original_key)
+            normalized_key = normalize_string(original_key)
             if normalized_key:
                 norm_map[normalized_key] = original_key
                 normalized_choices.append(normalized_key)
-        setattr(get_local_event_choice, "cacheChoices", normalized_choices)
-        setattr(get_local_event_choice, "cacheSource", events_db)
-        setattr(get_local_event_choice, "cacheNormalizedKeyMap", norm_map)
+        setattr(get_local_event_choice, "cache_choices", normalized_choices)
+        setattr(get_local_event_choice, "cache_source", events_db)
+        setattr(get_local_event_choice, "cache_normalized_key_map", norm_map)
         choices = normalized_choices
 
     if not query or not choices:
@@ -219,7 +219,7 @@ def warmup_event_index():
     if not events_db:
         return False
 
-    def normalizeString(text: str) -> str:
+    def normalize_string(text: str) -> str:
         if not text:
             return ""
         t = unicodedata.normalize('NFKD', str(text))
@@ -231,14 +231,14 @@ def warmup_event_index():
     norm_map = {}
     normalized_choices = []
     for original_key in events_db.keys():
-        normalized_key = normalizeString(original_key)
+        normalized_key = normalize_string(original_key)
         if normalized_key:
             norm_map[normalized_key] = original_key
             normalized_choices.append(normalized_key)
 
-    setattr(get_local_event_choice, "cacheChoices", normalized_choices)
-    setattr(get_local_event_choice, "cacheSource", events_db)
-    setattr(get_local_event_choice, "cacheNormalizedKeyMap", norm_map)
+    setattr(get_local_event_choice, "cache_choices", normalized_choices)
+    setattr(get_local_event_choice, "cache_source", events_db)
+    setattr(get_local_event_choice, "cache_normalized_key_map", norm_map)
     return True
 
 
@@ -418,6 +418,32 @@ def get_event_choice(ctx: UmamusumeContext, event_name: str):
                         return choice, "override", 0
             except Exception:
                 pass
+    except Exception:
+        pass
+    try:
+        ENERGY_CONDITIONAL_EVENTS = {
+            'extra training': (1, 2, 90),  # (high_energy_choice, low_energy_choice, threshold)
+        }
+        if event_name.strip().lower() in ENERGY_CONDITIONAL_EVENTS:
+            high_choice, low_choice, threshold = ENERGY_CONDITIONAL_EVENTS[event_name.strip().lower()]
+            energy = getattr(ctx.cultivate_detail.turn_info, 'cached_energy', 100)
+            if energy > threshold:
+                log.info(f"Energy conditional event '{event_name}': energy={energy}>{threshold}, choice {high_choice}")
+                return high_choice, "hardcoded", 0
+            else:
+                log.info(f"Energy conditional event '{event_name}': energy={energy}<={threshold}, choice {low_choice}")
+                return low_choice, "hardcoded", 0
+    except Exception:
+        pass
+    try:
+        POST_RACE_EVENTS = ('victory!', 'solid showing', 'defeat')
+        if event_name.strip().lower() in POST_RACE_EVENTS:
+            energy = getattr(ctx.cultivate_detail.turn_info, 'cached_energy', 100)
+            if energy > 20:
+                log.info(f"Post-race event '{event_name}' with energy={energy} - forcing choice 1")
+                return 1, "hardcoded", 0
+            else:
+                log.info(f"Post-race event '{event_name}' with low energy={energy} - using normal logic")
     except Exception:
         pass
     event_name_normalized = find_similar_text(event_name, event_name_list, 0.8)

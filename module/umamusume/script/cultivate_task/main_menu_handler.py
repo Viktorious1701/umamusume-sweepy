@@ -22,7 +22,7 @@ from module.umamusume.constants.timing_constants import (
     MEDIC_CHECK_DELAY, RACE_SEARCH_TIMEOUT
 )
 from module.umamusume.script.cultivate_task.parse import parse_date, parse_cultivate_main_menu
-from module.umamusume.script.cultivate_task.helpers import should_use_pal_outing_simple, detect_pal_stage, should_use_team_sirius_recreation, execute_team_sirius_recreation, execute_regular_recreation
+from module.umamusume.script.cultivate_task.helpers import should_use_pal_outing_simple, detect_pal_stage, should_use_group_card_recreation, execute_group_card_recreation, detect_group_card_dates
 from bot.recog.energy_scanner import scan_energy
 
 log = logger.get_logger(__name__)
@@ -54,12 +54,37 @@ def get_medic(ctx, summer=False):
 def script_cultivate_main_menu(ctx: UmamusumeContext):
     img = ctx.current_screen
     current_date = parse_date(img, ctx)
-    import bot.conn.u2_ctrl as u2c
-    u2c.IN_CAREER_RUN = True
+    from bot.base.runtime_state import get_state
+    get_state()["in_career_run"] = True
     if current_date == -1:
         current_date = -(len(ctx.cultivate_detail.turn_info_history) + 1)
 
-    if ctx.cultivate_detail.turn_info is None or current_date != ctx.cultivate_detail.turn_info.date:
+    last_known_date = getattr(ctx.cultivate_detail, '_last_known_date_id', -1)
+    if last_known_date != -1 and current_date > 0:
+        if current_date != last_known_date and current_date != last_known_date + 1:
+            if current_date > last_known_date + 1:
+                from module.umamusume.persistence import clear_all_persistence
+                clear_all_persistence()
+                ctx.cultivate_detail.mant_megaphone_tier = 0
+                ctx.cultivate_detail.mant_megaphone_turns = 0
+                ctx.cultivate_detail.mant_afflictions = []
+                ctx.cultivate_detail.mant_owned_items = []
+            elif current_date < last_known_date:
+                from module.umamusume.persistence import clear_career_data, clear_megaphone_state, clear_used_buffs
+                clear_career_data()
+                clear_megaphone_state()
+                clear_used_buffs()
+                ctx.cultivate_detail.facility_clicks = {"speed": 0, "stamina": 0, "power": 0, "guts": 0, "wits": 0}
+
+        ctx.cultivate_detail._last_known_date_id = current_date
+        from module.umamusume.persistence import save_last_known_date
+        save_last_known_date(current_date)
+    elif last_known_date == -1 and current_date > 0:
+        ctx.cultivate_detail._last_known_date_id = current_date
+        from module.umamusume.persistence import save_last_known_date
+        save_last_known_date(current_date)
+
+    if ctx.cultivate_detail.turn_info is None or abs(current_date) != abs(ctx.cultivate_detail.turn_info.date):
         if ctx.cultivate_detail.turn_info is not None:
             ctx.cultivate_detail.turn_info_history.append(ctx.cultivate_detail.turn_info)
             if len(ctx.cultivate_detail.turn_info_history) > 100:
@@ -68,17 +93,18 @@ def script_cultivate_main_menu(ctx: UmamusumeContext):
         ctx.cultivate_detail.turn_info.date = current_date
         ctx.cultivate_detail.mant_shop_scanned_this_turn = False
         if current_date > 0:
-            ctx.cultivate_detail.team_sirius_available_dates = []
+            ctx.cultivate_detail.group_card_available_dates = []
             ctx.cultivate_detail.pal_event_stage = 0
             if hasattr(ctx.cultivate_detail, 'pal_last_detection_date'):
                 delattr(ctx.cultivate_detail, 'pal_last_detection_date')
+    else:
+        ctx.cultivate_detail.turn_info.date = current_date
 
         if is_mant(ctx):
             from module.umamusume.scenario.mant.main_menu import handle_mant_turn_start
             handle_mant_turn_start(ctx, current_date)
 
         if current_date == NEW_RUN_DETECTION_DATE:
-            log.info("new run detected resetting manual purchase state")
             ctx.cultivate_detail.manual_purchase_completed = False
             if hasattr(ctx.cultivate_detail, 'manual_purchase_initiated'):
                 delattr(ctx.cultivate_detail, 'manual_purchase_initiated')
@@ -88,52 +114,48 @@ def script_cultivate_main_menu(ctx: UmamusumeContext):
 
     if not ctx.cultivate_detail.turn_info.parse_main_menu_finish:
         parse_cultivate_main_menu(ctx, img)
-        
+
         from module.umamusume.asset.race_data import get_races_for_period
         available_races = get_races_for_period(ctx.cultivate_detail.turn_info.date)
         ctx.cultivate_detail.turn_info.cached_available_races = available_races
         ctx.cultivate_detail.turn_info.parse_main_menu_finish = True
 
-    has_extra_race = len([race_id for race_id in ctx.cultivate_detail.extra_race_list 
+    has_extra_race = len([race_id for race_id in ctx.cultivate_detail.extra_race_list
                          if race_id in ctx.cultivate_detail.turn_info.cached_available_races]) != 0
 
     if not has_extra_race:
-        ts_enabled = getattr(ctx.cultivate_detail, 'team_sirius_enabled', False)
-        if ts_enabled:
-            if not ctx.cultivate_detail.team_sirius_available_dates:
+        if getattr(ctx.cultivate_detail, 'group_card_enabled', False):
+            if not ctx.cultivate_detail.group_card_available_dates:
                 img_gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
                 from module.umamusume.asset.template import UI_RECREATION_FRIEND_NOTIFICATION
                 ts_result = image_match(img_gray, UI_RECREATION_FRIEND_NOTIFICATION)
                 if ts_result.find_match:
-                    from module.umamusume.script.cultivate_task.helpers import detect_team_sirius_dates
-                    dates = detect_team_sirius_dates(ctx)
-                    ctx.cultivate_detail.team_sirius_available_dates = dates
-                    log.info(f"Team Sirius: Available dates: {dates}")
-                    time.sleep(0.5)
-                    img = ctx.ctrl.get_screen()
-                    ctx.current_screen = img
+                    dates = detect_group_card_dates(ctx)
+                    ctx.cultivate_detail.group_card_available_dates = dates
+                time.sleep(0.5)
+                img = ctx.ctrl.get_screen()
+                ctx.current_screen = img
 
-        if not ts_enabled and ctx.cultivate_detail.prioritize_recreation:
-            if ctx.cultivate_detail.pal_event_stage <= 0:
+        if not getattr(ctx.cultivate_detail, 'group_card_enabled', False) and ctx.cultivate_detail.prioritize_recreation:
+            pal_detection_date = getattr(ctx.cultivate_detail, 'pal_last_detection_date', -1)
+            if ctx.cultivate_detail.pal_event_stage <= 0 and current_date != pal_detection_date:
                 img_gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
                 from module.umamusume.asset.template import UI_RECREATION_FRIEND_NOTIFICATION
                 result = image_match(img_gray, UI_RECREATION_FRIEND_NOTIFICATION)
-                log.info(f"Recreation notification: {result.find_match}")
-                
+
                 if result.find_match:
-                    log.info("opening recreation menu to detect stage")
                     ctx.ctrl.click_by_point(get_trip(ctx))
                     time.sleep(0.15)
                     img = ctx.ctrl.get_screen()
-                    
+
                     calculated_stage = detect_pal_stage(ctx, img)
                     ctx.cultivate_detail.pal_event_stage = calculated_stage
-                    
+                    ctx.cultivate_detail.pal_last_detection_date = current_date
+
                     pal_thresholds = ctx.cultivate_detail.pal_thresholds
                     if pal_thresholds and calculated_stage <= len(pal_thresholds):
                         thresholds = pal_thresholds[calculated_stage - 1]
                         mood, energy, score = thresholds
-                        log.info(f"Stage {calculated_stage}: mood={mood} energy={energy} score={score}")
 
                     ctx.ctrl.click(5, 5)
                     time.sleep(0.15)
@@ -141,26 +163,22 @@ def script_cultivate_main_menu(ctx: UmamusumeContext):
                     return
                 else:
                     if ctx.cultivate_detail.pal_event_stage > 0:
-                        log.info("pal notification gone, resetting stage")
                         ctx.cultivate_detail.pal_event_stage = 0
 
     if has_extra_race and not is_mant(ctx):
-        if ctx.cultivate_detail.turn_info.turn_operation is None or ctx.cultivate_detail.turn_info.turn_operation.turn_operation_type != TurnOperationType.TURN_OPERATION_TYPE_RACE:
-            log.info("extra race this turn, prioritizing")
-            if ctx.cultivate_detail.turn_info.turn_operation is None:
-                ctx.cultivate_detail.turn_info.turn_operation = TurnOperation()
+        if ctx.cultivate_detail.turn_info.turn_operation is None:
+            ctx.cultivate_detail.turn_info.turn_operation = TurnOperation()
             ctx.cultivate_detail.turn_info.turn_operation.turn_operation_type = TurnOperationType.TURN_OPERATION_TYPE_RACE
             matching_races = [race_id for race_id in ctx.cultivate_detail.extra_race_list if race_id in ctx.cultivate_detail.turn_info.cached_available_races]
             if matching_races:
                 target_race_id = matching_races[0]
                 ctx.cultivate_detail.turn_info.turn_operation.race_id = target_race_id
-                log.info(f"Set race: {target_race_id}")
             else:
-                log.info("extra race not in available races")
+                pass
             ctx.cultivate_detail.turn_info.parse_train_info_finish = True
-            return
+
     if has_extra_race and is_mant(ctx):
-        log.info("MANT: extra race available but scanning training first")
+        pass
 
     if is_mant(ctx):
         from module.umamusume.scenario.mant.main_menu import handle_mant_main_menu
@@ -172,7 +190,7 @@ def script_cultivate_main_menu(ctx: UmamusumeContext):
         from module.umamusume.asset.race_data import get_races_for_period
         available_races = get_races_for_period(ctx.cultivate_detail.turn_info.date)
         ctx.cultivate_detail.turn_info.cached_available_races = available_races
-    has_extra_race = len([race_id for race_id in ctx.cultivate_detail.extra_race_list 
+    has_extra_race = len([race_id for race_id in ctx.cultivate_detail.extra_race_list
                          if race_id in available_races]) != 0
 
     turn_operation = ctx.cultivate_detail.turn_info.turn_operation
@@ -183,15 +201,11 @@ def script_cultivate_main_menu(ctx: UmamusumeContext):
         ctx.cultivate_detail.reset_skill_learn()
 
     skip_auto_skill_learning = (ctx.task.detail.manual_purchase_at_end and ctx.cultivate_detail.cultivate_finish)
-    
-    log.debug(f"Skill learning check - Skill points: {ctx.cultivate_detail.turn_info.uma_attribute.skill_point}, Threshold: {ctx.cultivate_detail.learn_skill_threshold}")
-    log.debug(f"Manual purchase enabled: {ctx.task.detail.manual_purchase_at_end}, Cultivate finish: {ctx.cultivate_detail.cultivate_finish}")
-    log.debug(f"Skip auto skill learning: {skip_auto_skill_learning}")
-    
+
+
     if (ctx.cultivate_detail.turn_info.uma_attribute.skill_point > ctx.cultivate_detail.learn_skill_threshold
             and not ctx.cultivate_detail.turn_info.turn_learn_skill_done
             and not skip_auto_skill_learning):
-        log.info(f"Auto-learning skills - Skill points: {ctx.cultivate_detail.turn_info.uma_attribute.skill_point}")
         ctx.ctrl.click_by_point(CULTIVATE_SKILL_LEARN)
         ctx.cultivate_detail.turn_info.parse_main_menu_finish = False
         return
@@ -201,22 +215,22 @@ def script_cultivate_main_menu(ctx: UmamusumeContext):
 
 
     if turn_operation is not None and turn_operation.turn_operation_type == TurnOperationType.TURN_OPERATION_TYPE_REST:
-        if should_use_team_sirius_recreation(ctx):
-            execute_team_sirius_recreation(ctx, trip_click_point=get_trip(ctx))
-            return
-        if getattr(ctx.cultivate_detail, 'team_sirius_enabled', False):
-            execute_regular_recreation(ctx, trip_click_point=get_trip(ctx))
-            return
+        if should_use_group_card_recreation(ctx):
+            if execute_group_card_recreation(ctx, trip_click_point=get_trip(ctx)):
+                return
         if should_use_pal_outing_simple(ctx):
             ctx.ctrl.click_by_point(get_trip(ctx))
             return
         ctx.cultivate_detail.turn_info.turn_operation = None
         ctx.cultivate_detail.turn_info.parse_main_menu_finish = False
         ctx.cultivate_detail.turn_info.parse_train_info_finish = False
+        ctx.ctrl.click_by_point(CULTIVATE_REST)
         return
-    
+
     if turn_operation is not None and turn_operation.turn_operation_type == TurnOperationType.TURN_OPERATION_TYPE_TRIP:
-        log.info("Executing trip operation")
+        if should_use_group_card_recreation(ctx):
+            if execute_group_card_recreation(ctx, trip_click_point=get_trip(ctx)):
+                return
         if is_summer_camp_period(ctx.cultivate_detail.turn_info.date):
             ctx.ctrl.click(68, 991, "Summer Camp")
         else:
@@ -232,11 +246,23 @@ def script_cultivate_main_menu(ctx: UmamusumeContext):
             time.sleep(0.15)
             energy = read_energy()
         if energy > 0 and energy < 33:
-            if should_use_pal_outing_simple(ctx):
-                ctx.ctrl.click_by_point(get_trip(ctx))
-            else:
-                ctx.ctrl.click_by_point(CULTIVATE_REST)
-            return
+            has_race = False
+            try:
+                from module.umamusume.asset.race_data import get_races_for_period
+                date = ctx.cultivate_detail.turn_info.date
+                available_races = get_races_for_period(date)
+                has_race = any(r in ctx.cultivate_detail.extra_race_list for r in available_races)
+                if not has_race:
+                    from module.umamusume.scenario.mant.inventory import has_scheduled_race_this_turn as check_fn
+                    has_race = check_fn(ctx)
+            except Exception:
+                pass
+            if not has_race:
+                if should_use_pal_outing_simple(ctx):
+                    ctx.ctrl.click_by_point(get_trip(ctx))
+                else:
+                    ctx.ctrl.click_by_point(CULTIVATE_REST)
+                return
 
     if is_mant(ctx):
         from module.umamusume.scenario.mant.main_menu import handle_mant_rival_race
@@ -250,27 +276,62 @@ def script_cultivate_main_menu(ctx: UmamusumeContext):
         if limit == 0:
             energy = 100
         else:
-            from bot.conn.fetch import read_energy
-            energy = read_energy()
+            from bot.recog.energy_scanner import scan_energy
+            base_energy, _, _ = scan_energy(ctx.ctrl)
+            energy = base_energy
             if energy == 0:
                 time.sleep(0.15)
-                energy = read_energy()
+                base_energy, _, _ = scan_energy(ctx.ctrl)
+                energy = base_energy
         if is_mant(ctx) and energy <= limit:
             ctx.cultivate_detail.turn_info.cached_energy = energy
-            if has_extra_race:
+            
+            from module.umamusume.scenario.mant.inventory import has_scheduled_race_this_turn
+            has_race_this_turn = has_scheduled_race_this_turn(ctx)
+            
+            if has_race_this_turn or has_extra_race:
                 from module.umamusume.scenario.mant.inventory import has_energy_recovery
                 if has_energy_recovery(ctx):
                     ctx.cultivate_detail.turn_info.energy_recovery_deferred = True
             else:
-                from module.umamusume.scenario.mant.inventory import handle_energy_recovery
-                if handle_energy_recovery(ctx):
-                    energy = read_energy()
+                date = ctx.cultivate_detail.turn_info.date
+                from module.umamusume.scenario.mant.inventory import has_charm
+                if date >= 13 and has_charm(ctx):
+                    pass
+                else:
+                    from module.umamusume.scenario.mant.inventory import handle_energy_recovery
+                    if handle_energy_recovery(ctx):
+                        energy = getattr(ctx.cultivate_detail.turn_info, 'cached_energy', energy)
         if energy <= limit:
             if getattr(ctx.cultivate_detail.turn_info, 'energy_recovery_deferred', False):
                 base_energy, _, _ = scan_energy(ctx.ctrl)
                 ctx.cultivate_detail.turn_info.base_energy = base_energy
                 ctx.ctrl.click_by_point(TO_TRAINING_SELECT)
                 return
+
+            _extra_now = [r for r in ctx.cultivate_detail.extra_race_list
+                          if r in ctx.cultivate_detail.turn_info.cached_available_races]
+            if _extra_now:
+                skip_race = False
+                try:
+                    if is_mant(ctx):
+                        from module.umamusume.scenario.mant.inventory import should_skip_race
+                        skip_race = should_skip_race(ctx)
+                except Exception:
+                    pass
+                if not skip_race:
+                    target_race_id = _extra_now[0]
+                    op = TurnOperation()
+                    op.turn_operation_type = TurnOperationType.TURN_OPERATION_TYPE_RACE
+                    op.race_id = target_race_id
+                    ctx.cultivate_detail.turn_info.turn_operation = op
+                    ctx.cultivate_detail.turn_info.parse_train_info_finish = True
+                    is_summer = is_summer_camp_period(ctx.cultivate_detail.turn_info.date)
+                    ctx.ctrl.click_by_point(get_race(ctx, summer=is_summer))
+                    return
+            if should_use_group_card_recreation(ctx):
+                if execute_group_card_recreation(ctx, trip_click_point=get_trip(ctx)):
+                    return
             if should_use_pal_outing_simple(ctx):
                 ctx.ctrl.click_by_point(get_trip(ctx))
             else:
@@ -289,18 +350,16 @@ def script_cultivate_main_menu(ctx: UmamusumeContext):
                 ctx.cultivate_detail.turn_info.base_energy = base_energy
             ctx.ctrl.click_by_point(TO_TRAINING_SELECT)
         elif turn_operation.turn_operation_type == TurnOperationType.TURN_OPERATION_TYPE_REST:
-            if should_use_team_sirius_recreation(ctx):
-                execute_team_sirius_recreation(ctx, trip_click_point=get_trip(ctx))
-                return
-            if getattr(ctx.cultivate_detail, 'team_sirius_enabled', False):
-                execute_regular_recreation(ctx, trip_click_point=get_trip(ctx))
-                return
+            if should_use_group_card_recreation(ctx):
+                if execute_group_card_recreation(ctx, trip_click_point=get_trip(ctx)):
+                    return
             if should_use_pal_outing_simple(ctx):
                 ctx.ctrl.click_by_point(get_trip(ctx))
                 return
             ctx.cultivate_detail.turn_info.turn_operation = None
             ctx.cultivate_detail.turn_info.parse_main_menu_finish = False
             ctx.cultivate_detail.turn_info.parse_train_info_finish = False
+            ctx.ctrl.click_by_point(TO_TRAINING_SELECT)
         elif turn_operation.turn_operation_type == TurnOperationType.TURN_OPERATION_TYPE_MEDIC:
             is_summer = is_summer_camp_period(ctx.cultivate_detail.turn_info.date)
             ctx.ctrl.click_by_point(get_medic(ctx, summer=is_summer))
@@ -311,14 +370,15 @@ def script_cultivate_main_menu(ctx: UmamusumeContext):
                 if is_summer:
                     check_point = img_rgb[1118, 100]
                 else:
-                    check_point = img_rgb[1125, 40]
+                    check_point = img_rgb[1125, 43]
             elif is_summer:
                 check_point = img_rgb[1130, 200]
             else:
                 check_point = img_rgb[1125, 105]
             if not (check_point[0] > 200 and check_point[1] > 200 and check_point[2] > 200):
-                log.info("not sick resetting decision")
-                ctx.ctrl.trigger_decision_reset = True
+                ctx.cultivate_detail.turn_info.medic_room_available = False
+                from bot.base.runtime_state import get_state
+                get_state()["trigger_decision_reset"] = True
         elif turn_operation.turn_operation_type == TurnOperationType.TURN_OPERATION_TYPE_TRIP:
             if is_summer_camp_period(ctx.cultivate_detail.turn_info.date):
                 ctx.ctrl.click(68, 991, "Summer Camp")
@@ -326,30 +386,28 @@ def script_cultivate_main_menu(ctx: UmamusumeContext):
                 ctx.ctrl.click_by_point(get_trip(ctx))
         elif turn_operation.turn_operation_type == TurnOperationType.TURN_OPERATION_TYPE_RACE:
             race_id = turn_operation.race_id
-            
+
             if race_id == 0 and current_date <= PRE_DEBUT_END:
-                log.info("Pre-Debut period with race fallback - redirecting to training instead")
                 ctx.cultivate_detail.turn_info.turn_operation = None
                 base_energy, _, _ = scan_energy(ctx.ctrl)
                 ctx.cultivate_detail.turn_info.base_energy = base_energy
                 ctx.ctrl.click_by_point(TO_TRAINING_SELECT)
                 return
-            
+
             if race_id is None and has_extra_race:
                 available_races = get_races_for_period(ctx.cultivate_detail.turn_info.date)
                 for race_id in ctx.cultivate_detail.extra_race_list:
                     if race_id in available_races:
-                        log.info(f"Prioritizing extra race {race_id} over other operations")
                         turn_operation.race_id = race_id
                         break
-            
+
             if is_ura_race(race_id):
                 img_gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
                 from module.umamusume.asset.template import UI_CULTIVATE_URA_RACE_1, UI_CULTIVATE_URA_RACE_2, UI_CULTIVATE_URA_RACE_3
-                
+
                 ura_race_available = False
                 ura_phase = ""
-                
+
                 if race_id == URA_QUALIFIER_ID:
                     ura_race_available = image_match(img_gray, UI_CULTIVATE_URA_RACE_1).find_match
                     ura_phase = "Qualifier"
@@ -359,33 +417,37 @@ def script_cultivate_main_menu(ctx: UmamusumeContext):
                 elif race_id in URA_FINAL_IDS:
                     ura_race_available = image_match(img_gray, UI_CULTIVATE_URA_RACE_3).find_match
                     ura_phase = "Final"
-                
+
                 if ura_race_available:
-                    log.info(f"URA {ura_phase} UI detected - proceeding to race")
                     if is_mant(ctx):
                         from module.umamusume.scenario.mant.inventory import handle_energy_drink_max_before_race, handle_glow_sticks_before_race
                         handle_energy_drink_max_before_race(ctx)
                         handle_glow_sticks_before_race(ctx)
                     is_summer = is_summer_camp_period(ctx.cultivate_detail.turn_info.date)
                     ctx.ctrl.click_by_point(get_race(ctx, summer=is_summer))
-                    return
                 else:
-                    log.info(f"URA {ura_phase} not yet available - continuing with normal flow")
                     ctx.cultivate_detail.turn_info.turn_operation = None
                     if not ctx.cultivate_detail.turn_info.parse_train_info_finish:
                         ctx.cultivate_detail.turn_info.parse_train_info_finish = True
                         return
                     else:
                         ctx.ctrl.click_by_point(TO_TRAINING_SELECT)
-                        return
             else:
-                log.info(f"Proceeding with race operation (race_id: {race_id})")
                 ti = ctx.cultivate_detail.turn_info
                 op = ctx.cultivate_detail.turn_info.turn_operation
                 if not hasattr(ti, 'race_search_started_at') or getattr(ti, 'race_search_id', None) != race_id:
                     ti.race_search_started_at = time.time()
                     ti.race_search_id = race_id
                 elif time.time() - ti.race_search_started_at > RACE_SEARCH_TIMEOUT:
+                    try:
+                        if getattr(ctx.task.detail, 'extra_race_list', None) is ctx.cultivate_detail.extra_race_list:
+                            ctx.cultivate_detail.extra_race_list = list(ctx.cultivate_detail.extra_race_list)
+                        if race_id and race_id in ctx.cultivate_detail.extra_race_list:
+                            ctx.cultivate_detail.extra_race_list.remove(race_id)
+                            from module.umamusume.asset.race_data import compute_race_chains
+                            ctx.cultivate_detail.race_chain_map = compute_race_chains(ctx.cultivate_detail.extra_race_list)
+                    except Exception as e:
+                        pass
                     ctx.cultivate_detail.turn_info.turn_operation = None
                     if hasattr(ti, 'race_search_started_at'):
                         delattr(ti, 'race_search_started_at')
@@ -398,4 +460,3 @@ def script_cultivate_main_menu(ctx: UmamusumeContext):
                     handle_glow_sticks_before_race(ctx)
                 is_summer = is_summer_camp_period(ctx.cultivate_detail.turn_info.date)
                 ctx.ctrl.click_by_point(get_race(ctx, summer=is_summer))
-                return

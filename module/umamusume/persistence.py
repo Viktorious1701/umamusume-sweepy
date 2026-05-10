@@ -12,7 +12,8 @@ PERSISTENCE_FILE = os.path.normpath(PERSISTENCE_FILE)
 PERSIST_FILE = os.path.join(os.path.dirname(__file__), '..', '..', 'persist.json')
 PERSIST_FILE = os.path.normpath(PERSIST_FILE)
 
-MAX_DATAPOINTS = 888
+MAX_DATAPOINTS = 2000
+HISTORY_VERSION_FLAG = "aaa"
 
 career_cleared_flag = False
 career_data_lock = threading.Lock()
@@ -37,17 +38,33 @@ def save_career_data(ctx):
                 career_cleared_flag = False
                 ctx.cultivate_detail.score_history = []
                 ctx.cultivate_detail.percentile_history = []
+                ctx.cultivate_detail.facility_clicks = {"speed": 0, "stamina": 0, "power": 0, "guts": 0, "wits": 0}
                 log.info("Career data cleared from memory")
                 return
             score_history = getattr(ctx.cultivate_detail, 'score_history', [])
-            if not score_history:
+            facility_clicks = getattr(ctx.cultivate_detail, 'facility_clicks', None)
+            if not score_history and not facility_clicks:
                 return
-            scores = list(score_history[-MAX_DATAPOINTS:])
+            scores = score_history[-MAX_DATAPOINTS:]
             stat_only_history = getattr(ctx.cultivate_detail, 'stat_only_history', [])
-            stat_only = list(stat_only_history[-MAX_DATAPOINTS:])
+            stat_only = stat_only_history[-MAX_DATAPOINTS:]
+            energy_history = getattr(ctx.cultivate_detail, 'energy_history', [])
+            energy = energy_history[-MAX_DATAPOINTS:]
+            action_history = getattr(ctx.cultivate_detail, 'action_history', [])
+            actions = action_history[-MAX_DATAPOINTS:]
+            raw_stat_history = getattr(ctx.cultivate_detail, 'raw_stat_history', [])
+            raw_stats = raw_stat_history[-MAX_DATAPOINTS:]
+            date_history = getattr(ctx.cultivate_detail, 'date_history', [])
+            dates = date_history[-MAX_DATAPOINTS:]
             data = {
+                'version': HISTORY_VERSION_FLAG,
                 'score_history': scores,
                 'stat_only_history': stat_only,
+                'energy_history': energy,
+                'action_history': actions,
+                'raw_stat_history': raw_stats,
+                'date_history': dates,
+                'facility_clicks': getattr(ctx.cultivate_detail, 'facility_clicks', {"speed": 0, "stamina": 0, "power": 0, "guts": 0, "wits": 0})
             }
             with open(PERSISTENCE_FILE, 'w') as f:
                 json.dump(data, f)
@@ -63,14 +80,37 @@ def load_career_data(ctx):
             return False
         with open(PERSISTENCE_FILE, 'r') as f:
             data = json.load(f)
+        stored_version = data.get('version', "")
+        if stored_version != HISTORY_VERSION_FLAG:
+            clear_career_data()
+            return False
+
+        required_keys = {'score_history', 'stat_only_history', 'energy_history', 'action_history', 'raw_stat_history', 'date_history', 'facility_clicks'}
+        if not required_keys.issubset(data.keys()):
+            log.info("Career data format mismatch - clearing old data")
+            clear_career_data()
+            return False
         score_history = data.get('score_history', [])
         stat_only_history = data.get('stat_only_history', [])
+        energy_history = data.get('energy_history', [])
+        action_history = data.get('action_history', [])
+        raw_stat_history = data.get('raw_stat_history', [])
+        date_history = data.get('date_history', [])
         if not score_history:
             return False
-        scores = list(score_history[-MAX_DATAPOINTS:])
-        stat_only = list(stat_only_history[-MAX_DATAPOINTS:])
+        scores = score_history[-MAX_DATAPOINTS:]
+        stat_only = stat_only_history[-MAX_DATAPOINTS:]
+        energy = energy_history[-MAX_DATAPOINTS:]
+        actions = action_history[-MAX_DATAPOINTS:]
+        raw_stats = raw_stat_history[-MAX_DATAPOINTS:]
+        dates = date_history[-MAX_DATAPOINTS:]
         ctx.cultivate_detail.score_history = scores
         ctx.cultivate_detail.stat_only_history = stat_only
+        ctx.cultivate_detail.energy_history = energy
+        ctx.cultivate_detail.action_history = actions
+        ctx.cultivate_detail.raw_stat_history = raw_stats
+        ctx.cultivate_detail.date_history = dates
+        ctx.cultivate_detail.facility_clicks = data.get('facility_clicks', {"speed": 0, "stamina": 0, "power": 0, "guts": 0, "wits": 0})
         ctx.cultivate_detail.percentile_history = rebuild_percentile_history(scores)
         log.info(f"Restored career data: {len(scores)} datapoints")
         return True
@@ -84,7 +124,16 @@ def clear_career_data():
     try:
         with career_data_lock:
             with open(PERSISTENCE_FILE, 'w') as f:
-                json.dump({'score_history': [], 'stat_only_history': []}, f)
+                json.dump({
+                    'version': HISTORY_VERSION_FLAG,
+                    'score_history': [], 
+                    'stat_only_history': [], 
+                    'energy_history': [], 
+                    'action_history': [], 
+                    'raw_stat_history': [], 
+                    'date_history': [],
+                    'facility_clicks': {"speed": 0, "stamina": 0, "power": 0, "guts": 0, "wits": 0}
+                }, f)
                 f.flush()
                 os.fsync(f.fileno())
             career_cleared_flag = True
@@ -150,8 +199,7 @@ def set_ignore_cat_food(flag=True):
 
 def clear_ignore_cat_food():
     data = load_persist()
-    if 'ignore_cat_food' in data:
-        del data['ignore_cat_food']
+    data.pop('ignore_cat_food', None)
     save_persist(data)
 
 
@@ -168,8 +216,7 @@ def set_ignore_grilled_carrots(flag=True):
 
 def clear_ignore_grilled_carrots():
     data = load_persist()
-    if 'ignore_grilled_carrots' in data:
-        del data['ignore_grilled_carrots']
+    data.pop('ignore_grilled_carrots', None)
     save_persist(data)
 
 
@@ -192,3 +239,42 @@ def clear_megaphone_state():
     data.pop('megaphone_tier', None)
     data.pop('megaphone_turns', None)
     save_persist(data)
+
+
+def save_last_known_date(date):
+    data = load_persist()
+    data['last_known_date'] = date
+    save_persist(data)
+
+
+def load_last_known_date():
+    data = load_persist()
+    return data.get('last_known_date', -1)
+
+
+def save_afflictions(afflictions):
+    data = load_persist()
+    data['afflictions'] = afflictions
+    save_persist(data)
+
+
+def load_afflictions():
+    data = load_persist()
+    return data.get('afflictions', [])
+
+
+def save_inventory(inventory):
+    data = load_persist()
+    data['inventory'] = inventory
+    save_persist(data)
+
+
+def load_inventory():
+    data = load_persist()
+    return data.get('inventory', [])
+
+
+def clear_all_persistence():
+    save_persist({})
+    clear_career_data()
+

@@ -21,21 +21,43 @@ detected_portraits_log = {}
 detected_items_log = {}
 detected_shop_items_log = {}
 
-def log_detected_portrait(name, favor_level, is_npc=False):
-    if not name or favor_level == 0:
+CARD_TYPE_MAPPING = {
+    1: "Speed",
+    2: "Stamina",
+    3: "Power",
+    4: "Guts",
+    5: "Wits",
+    6: "Friend",
+    7: "Group",
+    10: "NPC"
+}
+
+def log_detected_portrait(name, favor_level, is_npc=False, card_type=None):
+    if not name or not favor_level:
         return
+    
+    type_name = "Unknown"
+    if card_type is not None:
+        if hasattr(card_type, "value"):
+            type_name = CARD_TYPE_MAPPING.get(card_type.value, "Unknown")
+        else:
+            type_name = CARD_TYPE_MAPPING.get(card_type, "Unknown")
+
     existing = detected_portraits_log.get(name)
     if existing:
         existing["favor"] = favor_level
+        if type_name != "Unknown":
+            existing["card_type"] = type_name
     else:
         detected_portraits_log[name] = {
             "name": name,
             "favor": favor_level,
             "is_npc": is_npc,
+            "card_type": type_name
         }
 
 def clear_detected_portraits():
-    detected_portraits_log.clear()
+    pass
 
 def log_detected_skill(name, source, hint_level=0, cost=0, gold=False):
     if not name:
@@ -58,11 +80,11 @@ def log_detected_skill(name, source, hint_level=0, cost=0, gold=False):
         }
 
 def clear_detected_skills():
-    detected_skills_log.clear()
+    pass
 
 def log_detected_items(items):
     from module.umamusume.scenario.mant.shop import WEBUI_EXCLUDED_PREFIXES
-    detected_items_log.clear()
+    current_items = set()
     for name, qty in items:
         if name in WEBUI_EXCLUDED_PREFIXES:
             continue
@@ -70,25 +92,23 @@ def log_detected_items(items):
             "name": name,
             "qty": qty,
         }
+        current_items.add(name)
+    for name in list(detected_items_log.keys()):
+        if name not in current_items:
+            del detected_items_log[name]
 
 def clear_detected_items():
-    detected_items_log.clear()
+    pass
 
 def log_detected_shop_items(items):
-    preserved_rewards = {name: entry for name, entry in detected_shop_items_log.items()
-                         if entry.get('race_reward')}
-    detected_shop_items_log.clear()
-    for name, turns, purchased in items:
-        if purchased:
+    for name, turns, buyable in items:
+        if not buyable:
             continue
         detected_shop_items_log[name] = {
             "name": name,
             "turns": turns,
-            "purchased": purchased,
+            "purchased": False,
         }
-    for name, entry in preserved_rewards.items():
-        if name not in detected_shop_items_log:
-            detected_shop_items_log[name] = entry
 
 def add_detected_shop_items(names, turns):
     for name in names:
@@ -96,14 +116,15 @@ def add_detected_shop_items(names, turns):
         detected_shop_items_log[name] = {
             "name": name,
             "turns": turns,
-            "purchased": False,
+            "purchased": existing.get("purchased", False) if existing else False,
             "race_reward": True,
         }
 
 def clear_detected_shop_items():
-    detected_shop_items_log.clear()
+    pass
 
 class CultivateContextDetail:
+    race_chain_map: dict[int, tuple[int, int]]
     turn_info: TurnInfo | None
     turn_info_history: list[TurnInfo]
     scenario: any
@@ -128,6 +149,7 @@ class CultivateContextDetail:
     parse_factor_done: bool
     extra_weight: list
     spirit_explosion: list
+    learned_skill_names: set
     manual_purchase_completed: bool
     final_skill_sweep_active: bool
     user_provided_priority: bool
@@ -147,8 +169,18 @@ class CultivateContextDetail:
     friendship_score_groups: list
     score_history: list[float]
     percentile_history: list[float]
+    energy_history: list[float]
+    action_history: list[str]
+    raw_stat_history: list[float]
+    date_history: list[int]
+    facility_clicks: dict[str, int]
+    last_title: str
+    same_title_count: int
+    facility_ratios: list[float]
+    facility_period_configs: list[dict]
 
     def __init__(self):
+        self.race_chain_map = {}
         self.expect_attribute = None
         self.turn_info = TurnInfo()
         self.turn_info_history = []
@@ -167,6 +199,7 @@ class CultivateContextDetail:
         self.parse_factor_done = False
         self.extra_weight = []
         self.spirit_explosion = [0.16, 0.16, 0.16, 0.06, 0.11]
+        self.learned_skill_names = set()
         self.manual_purchase_completed = False
         self.final_skill_sweep_active = False
         self.mant_shop_items = []
@@ -176,10 +209,12 @@ class CultivateContextDetail:
         self.mant_coins = 0
         self.mant_inventory_scanned = False
         self.mant_owned_items = []
+        self.mant_max_energy = 100
         self.user_provided_priority = False
         self.event_overrides = {}
         self.use_last_parents = False
         self.pal_event_stage = 0
+        self.pal_stage_detection_done_this_turn = False
         self.pal_name = ""
         self.pal_friendship_score = list(DEFAULT_PAL_FRIENDSHIP_SCORES)
         self.pal_card_multiplier = DEFAULT_PAL_CARD_MULTIPLIER
@@ -188,10 +223,17 @@ class CultivateContextDetail:
         self.summer_score_threshold = DEFAULT_SUMMER_SCORE_THRESHOLD
         self.stat_value_multiplier = list(DEFAULT_STAT_VALUE_MULTIPLIER)
         self.wit_special_multiplier = list(DEFAULT_WIT_SPECIAL_MULTIPLIER)
-        self.team_sirius_enabled = False
-        self.team_sirius_percentile = 26
-        self.team_sirius_available_dates = []
-        self.team_sirius_last_date = -1
+        self.group_card_enabled = False
+        self.group_card_name = ""
+        self.group_card_percentile = 26
+        self.group_card_available_dates = []
+        self.group_card_last_date = -1
+        self.last_title = ""
+        self.same_title_count = 0
+        self.facility_clicks = {"speed": 0, "stamina": 0, "power": 0, "guts": 0, "wits": 0}
+        self.facility_ratios = [1.0] * 5
+        self.facility_period_configs = [{'enabled': False, 'base': 0.0, 'scale': 0.0} for _ in range(6)]
+
 
     def reset_skill_learn(self):
         self.learn_skill_done = False
@@ -204,9 +246,12 @@ class CultivateContextDetail:
 class UmamusumeContext(BotContext):
     task: UmamusumeTask
     cultivate_detail: CultivateContextDetail
+    fallback_click_count: int
 
     def __init__(self, task, ctrl):
         super().__init__(task, ctrl)
+        self.adb = ctrl
+        self.fallback_click_count = 0
 
     def is_task_finish(self) -> bool:
         return False
@@ -219,21 +264,20 @@ def build_context(task: UmamusumeTask, ctrl) -> UmamusumeContext:
         clear_detected_portraits()
         clear_detected_items()
         clear_detected_shop_items()
-        from module.umamusume.persistence import clear_ignore_cat_food, clear_ignore_grilled_carrots
-        clear_ignore_cat_food()
-        clear_ignore_grilled_carrots()
         detail = CultivateContextDetail()
         detail.scenario = create_scenario(task.detail.scenario)
         if detail.scenario is None:
-            log.error("Unknown scenario")
+            pass
         detail.expect_attribute = task.detail.expect_attribute
         detail.follow_support_card_name = task.detail.follow_support_card_name
         detail.follow_support_card_level = task.detail.follow_support_card_level
         detail.extra_race_list = list(task.detail.extra_race_list or [])
+        from module.umamusume.asset.race_data import compute_race_chains
+        detail.race_chain_map = compute_race_chains(detail.extra_race_list)
         detail.learn_skill_list = [list(x) for x in (task.detail.learn_skill_list or [])]
         try:
             src = task.detail.learn_skill_list or []
-            detail.user_provided_priority = any((isinstance(x, list) and len(x) > 0) for x in src)
+            detail.user_provided_priority = any((isinstance(x, list) and x) for x in src)
         except Exception:
             detail.user_provided_priority = False
         detail.learn_skill_blacklist = list(task.detail.learn_skill_blacklist or [])
@@ -247,14 +291,14 @@ def build_context(task: UmamusumeTask, ctrl) -> UmamusumeContext:
             detail.extra_weight = list(task.detail.extra_weight or [])
         except Exception:
             detail.extra_weight = []
-        
+
         try:
             se = getattr(task.detail, 'spirit_explosion', DEFAULT_SPIRIT_EXPLOSION)
             detail.spirit_explosion = list(se) if se else list(DEFAULT_SPIRIT_EXPLOSION)
         except Exception:
             detail.spirit_explosion = list(DEFAULT_SPIRIT_EXPLOSION)
-        
-     
+
+
         detail.rest_threshold = getattr(task.detail, 'rest_threshold', getattr(task.detail, 'rest_treshold', getattr(task.detail, 'fast_path_energy_limit', 48)))
         detail.motivation_threshold_year1 = int(getattr(task.detail, 'motivation_threshold_year1', 3))
         detail.motivation_threshold_year2 = int(getattr(task.detail, 'motivation_threshold_year2', 4))
@@ -288,34 +332,61 @@ def build_context(task: UmamusumeTask, ctrl) -> UmamusumeContext:
         detail.hint_boost_characters = list(getattr(task.detail, 'hint_boost_characters', []))
         detail.hint_boost_multiplier = int(getattr(task.detail, 'hint_boost_multiplier', 100))
         detail.friendship_score_groups = list(getattr(task.detail, 'friendship_score_groups', []))
+        detail.facility_ratios = list(getattr(task.detail, 'facility_ratios', [1.0] * 5))
+        detail.facility_period_configs = [dict(d) for d in getattr(task.detail, 'facility_period_configs', [{'enabled': False, 'base': 0.0, 'scale': 0.0} for _ in range(6)])]
         detail.score_history = []
         detail.percentile_history = []
+        detail.energy_history = []
+        detail.action_history = []
+        detail.raw_stat_history = []
+        detail.date_history = []
         try:
             eo = getattr(task.detail, 'event_overrides', {})
             detail.event_overrides = eo if isinstance(eo, dict) else {}
         except Exception:
             detail.event_overrides = {}
-        
+
         ctx.cultivate_detail = detail
 
-        detail.team_sirius_available_dates = []
-        detail.team_sirius_enabled = False
-        detail.team_sirius_percentile = 26
-        detail.team_sirius_last_date = -1
         pcs = getattr(task.detail, 'pal_card_store', None)
         if isinstance(pcs, dict):
-            ts_data = pcs.get('team_sirius', None)
-            if isinstance(ts_data, dict) and ts_data.get('group') == 'team_sirius':
-                detail.team_sirius_enabled = bool(ts_data.get('enabled', False))
-                detail.team_sirius_percentile = int(ts_data.get('percentile', 26))
-        
+            for _key, _val in pcs.items():
+                if not isinstance(_val, (dict, list)):
+                    continue
+                if isinstance(_val, dict):
+                    _pal_type = _val.get('type', 'group' if _val.get('group') else 'friend')
+                else:
+                    _pal_type = 'friend'
+
+                if _pal_type == 'group':
+                    if not detail.group_card_enabled:
+                        _group_name = _val.get('group', _key) if isinstance(_val, dict) else _key
+                        _enabled = _val.get('enabled', False) if isinstance(_val, dict) else False
+                        if _enabled:
+                            detail.group_card_enabled = True
+                            detail.group_card_name = _group_name
+                            detail.group_card_percentile = int(_val.get('percentile', 26)) if isinstance(_val, dict) else 26
+        if detail.prioritize_recreation and detail.pal_thresholds:
+            detail.group_card_enabled = False
+            detail.group_card_name = ""
+
         try:
-            from module.umamusume.persistence import load_megaphone_state
+            from module.umamusume.persistence import load_megaphone_state, load_afflictions, load_inventory, load_last_known_date
             mega_tier, mega_turns = load_megaphone_state()
             detail.mant_megaphone_tier = mega_tier
             detail.mant_megaphone_turns = mega_turns
             if mega_tier > 0 and mega_turns > 0:
-                log.info("Restored megaphone state")
+                pass
+
+            detail.mant_afflictions = load_afflictions()
+            if detail.mant_afflictions:
+                pass
+
+            detail.mant_owned_items = load_inventory()
+            if detail.mant_owned_items:
+                pass
+
+            detail._last_known_date_id = load_last_known_date()
         except Exception:
             detail.mant_megaphone_tier = 0
             detail.mant_megaphone_turns = 0

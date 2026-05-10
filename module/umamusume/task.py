@@ -2,6 +2,9 @@ from enum import Enum
 from module.umamusume.define import ScenarioType
 from bot.base.task import Task, TaskExecuteMode
 from module.umamusume.scenario.configs import ScenarioConfig, AoharuConfig, MantConfig
+import bot.base.log as logger
+log = logger.get_logger(__name__)
+log = logger.get_logger(__name__)
 
 
 class TaskDetail:
@@ -25,7 +28,6 @@ class TaskDetail:
     manual_purchase_at_end: bool
     override_insufficient_fans_forced_races: bool
     use_last_parents: bool
-    # Motivation thresholds for trip logic
     motivation_threshold_year1: int
     motivation_threshold_year2: int
     motivation_threshold_year3: int
@@ -46,7 +48,13 @@ class TaskDetail:
     hint_boost_characters: list[str]
     hint_boost_multiplier: int
     friendship_score_groups: list
+    character_score_configs: dict
     pal_card_store: dict
+    group_card_enabled: bool
+    group_card_name: str
+    group_card_percentile: int
+    facility_ratios: list[float]
+    facility_period_configs: list[dict]
 
 
 class EndTaskReason(Enum):
@@ -102,19 +110,40 @@ def build_task(task_execute_mode: TaskExecuteMode, task_type: int,
 
     td.summer_score_threshold = attachment_data.get('summer_score_threshold', 0.34)
     td.wit_race_search_threshold = attachment_data.get('wit_race_search_threshold', 0.15)
+    td.facility_period_configs = attachment_data.get('facility_period_configs', [{'enabled': False, 'base': 0.0, 'scale': 0.0, 'ratios': [1.0] * 5} for _ in range(6)])
     
     td.motivation_threshold_year1 = attachment_data.get('motivation_threshold_year1', 3)
     td.motivation_threshold_year2 = attachment_data.get('motivation_threshold_year2', 4)
     td.motivation_threshold_year3 = attachment_data.get('motivation_threshold_year3', 4)
     td.pal_name = attachment_data.get('pal_name', "")
     td.pal_thresholds = attachment_data.get('pal_thresholds', [])
-    if not isinstance(td.pal_thresholds, list) or len(td.pal_thresholds) == 0:
+    if not isinstance(td.pal_thresholds, list) or not td.pal_thresholds:
         td.pal_thresholds = []
-    td.prioritize_recreation = attachment_data.get('prioritize_recreation', False) and len(td.pal_thresholds) > 0
+    td.prioritize_recreation = attachment_data.get('prioritize_recreation', False) and bool(td.pal_thresholds)
 
     td.pal_friendship_score = attachment_data.get('pal_friendship_score', [0.08, 0.057, 0.018])
     td.pal_card_multiplier = attachment_data.get('pal_card_multiplier', 0.1)
     td.pal_card_store = attachment_data.get('pal_card_store', {})
+    td.group_card_enabled = False
+    td.group_card_name = ""
+    td.group_card_percentile = 26
+    if isinstance(td.pal_card_store, dict):
+        for _k, _v in td.pal_card_store.items():
+            if not isinstance(_v, (dict, list)):
+                continue
+            if isinstance(_v, dict):
+                _pal_type = _v.get('type', 'group' if _v.get('group') else 'friend')
+            else:
+                _pal_type = 'friend'
+            if _pal_type == 'group' and not td.group_card_enabled:
+                _enabled = _v.get('enabled', False) if isinstance(_v, dict) else False
+                if _enabled:
+                    td.group_card_enabled = True
+                    td.group_card_name = _v.get('group', _k) if isinstance(_v, dict) else _k
+                    td.group_card_percentile = int(_v.get('percentile', 26)) if isinstance(_v, dict) else 26
+    if td.prioritize_recreation and td.pal_thresholds:
+        td.group_card_enabled = False
+        td.group_card_name = ""
     td.npc_score_value = attachment_data.get('npc_score_value', [
         [0.05, 0.05, 0.05],
         [0.05, 0.05, 0.05],
@@ -163,6 +192,7 @@ def build_task(task_execute_mode: TaskExecuteMode, task_type: int,
     td.hint_boost_characters = attachment_data.get('hint_boost_characters', [])
     td.hint_boost_multiplier = int(attachment_data.get('hint_boost_multiplier', 100))
     td.friendship_score_groups = attachment_data.get('friendship_score_groups', [])
+    td.character_score_configs = attachment_data.get('character_score_configs', {})
     
     ut.detail = td
     return ut

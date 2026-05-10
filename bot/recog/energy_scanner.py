@@ -5,6 +5,17 @@ from bot.recog.image_matcher import image_match
 ENERGY_BAR_Y = 161
 ENERGY_BAR_START_X = 227
 energy_template = None
+current_max_energy = 100
+
+
+def set_max_energy(max_energy):
+    global current_max_energy
+    current_max_energy = max_energy
+
+
+def get_max_energy():
+    return current_max_energy
+
 
 def get_energy_template():
     global energy_template
@@ -65,7 +76,7 @@ def extract_row(img, bar_start, bar_end, y=ENERGY_BAR_Y):
 
 def compare_rows(base_row, current_row):
     length = min(len(base_row), len(current_row))
-    if length == 0:
+    if not length:
         return 0
     diff = np.abs(base_row[:length].astype(np.int16) - current_row[:length].astype(np.int16))
     mismatches = np.any(diff > 5, axis=1)
@@ -93,7 +104,7 @@ def scan_energy_single(img, y=ENERGY_BAR_Y):
     else:
         filled = first_gray - ENERGY_BAR_START_X - 1
         gray_count = bar_end - first_gray
-    base_energy = filled / bar_length * 100
+    base_energy = filled / bar_length * current_max_energy
     return row, gray_count, base_energy
 
 
@@ -101,9 +112,9 @@ def scan_energy(ctrl, y=ENERGY_BAR_Y):
     global reference_row, reference_bar_length, reference_gray_count, reference_brightness
     prev_row = None
     prev_valid = False
-    max_attempts = 10
+    max_attempts = 5
     for _ in range(max_attempts):
-        img = ctrl.get_screen()
+        img = ctrl.get_screen(force=prev_valid)
         template = get_energy_template()
         match_result = image_match(img, template)
         if not match_result.find_match:
@@ -142,7 +153,7 @@ def scan_training_energy_change_single(img, y=ENERGY_BAR_Y):
     mismatches = compare_rows(reference_row, current_row)
     if mismatches == 0:
         return 0.0
-    energy_change_pct = mismatches / reference_bar_length * 100
+    energy_change_pct = mismatches / reference_bar_length * current_max_energy
     first_gray = find_first_gray(img, ENERGY_BAR_START_X, bar_end, y)
     current_gray_count = (bar_end - first_gray) if first_gray else 0
     if current_gray_count > reference_gray_count:
@@ -184,6 +195,6 @@ def scan_base_energy(img, y=ENERGY_BAR_Y):
         return 0
     first_gray = find_first_gray(img, ENERGY_BAR_START_X, bar_end, y)
     if first_gray is None:
-        return 100.0
+        return float(current_max_energy)
     filled = first_gray - ENERGY_BAR_START_X - 1
-    return filled / bar_length * 100
+    return filled / bar_length * current_max_energy

@@ -12,7 +12,7 @@ import cv2
 from bot.base.resource import UI, NOT_FOUND_UI
 from bot.base.task import TaskStatus, Task, EndTaskReason
 from bot.conn.os import push_system_notification
-from bot.conn.u2_ctrl import U2AndroidController
+from bot.conn.adb_controller import AdbController
 from bot.recog.image_matcher import template_match, image_match
 from bot.recog.ocr import reset_ocr
 from bot.recog.timeout_tracker import check_and_reset_timeout
@@ -21,14 +21,12 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from bot.base.manifest import APP_MANIFEST_LIST
 from config import CONFIG
 
-
 log = logger.get_logger(__name__)
-
 debug = True
 
-
-def get_controller() -> U2AndroidController:
-    return U2AndroidController()
+def get_controller() -> AdbController:
+    from config import CONFIG
+    return AdbController(CONFIG.bot.auto.adb.device_name)
 
 
 class Executor:
@@ -176,6 +174,7 @@ class Executor:
                 last_img = None
                 unchanged = 0
                 last_restart_time = 0
+                none_count = 0
 
                 def preprocess(im):
                     try:
@@ -197,7 +196,14 @@ class Executor:
 
                         img = controller.get_screen(to_gray=True)
                         if img is None:
+                            none_count += 1
                             unchanged += 1
+                            
+                            if none_count >= 2:
+                                controller.reinit_connection()
+                                none_count = 0
+                                last_img = None
+
                             try:
                                 if update_watchdog:
                                     update_watchdog(unchanged)
@@ -211,6 +217,7 @@ class Executor:
                             except Exception:
                                 pass
                         else:
+                            none_count = 0
                             cur = preprocess(img)
                             if last_img is None:
                                 last_img = cur
@@ -253,6 +260,7 @@ class Executor:
                                     pass
                             else:
                                 unchanged = 0
+                                last_img = cur
                                 try:
                                     if update_watchdog:
                                         update_watchdog(unchanged)
@@ -267,29 +275,33 @@ class Executor:
                             last_img = cur
 
                         if unchanged >= watchdog_threshold:
-                            print(
-                                f"{watchdog_threshold}/{watchdog_threshold} restarting app", flush=True)
+                            print(f"{watchdog_threshold}/{watchdog_threshold} restarting app", flush=True)      
                             try:
-                                log.info(
-                                    f"watchdog {watchdog_threshold}/{watchdog_threshold} restarting app")
+                                log.info(f"watchdog {watchdog_threshold}/{watchdog_threshold} restarting app")  
                             except Exception:
                                 pass
+
+                            recovery_success = False
                             try:
-                                import bot.conn.u2_ctrl as u2c
-                                u2c.INPUT_BLOCKED = True
+                                from bot.base.runtime_state import get_state
+                                state = get_state()
+                                state["input_blocked"] = True
+
                                 for attempt in range(3):
                                     try:
-                                        controller.execute_adb_shell(
-                                            "shell am force-stop com.cygames.umamusume", True)
+                                        controller.execute_adb_shell("am force-stop com.cygames.umamusume", True)
+                                        recovery_success = True
                                         break
                                     except Exception:
                                         time.sleep(1.0)
+
                                 time.sleep(1.0)
                                 try:
                                     controller.recover_home_and_reopen()
+                                    recovery_success = True
                                 except Exception:
-                                    controller.start_app(
-                                        manifest.app_package_name, manifest.app_activity_name)
+                                    controller.start_app(manifest.app_package_name, manifest.app_activity_name) 
+
                                 time.sleep(2.0)
                                 try:
                                     controller.trigger_decision_reset = True
@@ -299,9 +311,10 @@ class Executor:
                                 pass
                             finally:
                                 try:
-                                    u2c.INPUT_BLOCKED = False
+                                    state["input_blocked"] = False
                                 except Exception:
                                     pass
+                            
                             unchanged = 0
                             last_img = None
                             last_restart_time = time.time()

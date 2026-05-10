@@ -133,6 +133,25 @@ def get_task():
     return bot_ctrl.get_task_list()
 
 
+@server.get("/api/current-date")
+def get_current_date():
+    import json
+    import os
+    from module.umamusume.persistence import PERSISTENCE_FILE
+    try:
+        if not os.path.exists(PERSISTENCE_FILE):
+            return {"date": None}
+        with open(PERSISTENCE_FILE, 'r') as f:
+            data = json.load(f)
+        date_history = data.get('date_history', [])
+        if not date_history:
+            return {"date": None}
+        # Return most recent date
+        return {"date": date_history[-1]}
+    except Exception:
+        return {"date": None}
+
+
 class RuntimeThresholds(BaseModel):
     repetitive_threshold: Optional[int] = None
     watchdog_threshold: Optional[int] = None
@@ -285,6 +304,23 @@ def clear_career_data_endpoint():
     return {"cleared": cleared}
 
 
+@server.get("/api/career-data-count")
+def get_career_data_count():
+    import json
+    import os
+    from module.umamusume.persistence import PERSISTENCE_FILE
+    try:
+        if not os.path.exists(PERSISTENCE_FILE):
+            return {"count": 0, "facility_clicks": {"speed": 0, "stamina": 0, "power": 0, "guts": 0, "wits": 0}}
+        with open(PERSISTENCE_FILE, 'r') as f:
+            data = json.load(f)
+        score_history = data.get('score_history', [])
+        facility_clicks = data.get('facility_clicks', {"speed": 0, "stamina": 0, "power": 0, "guts": 0, "wits": 0})
+        return {"count": len(score_history), "facility_clicks": facility_clicks}
+    except Exception:
+        return {"count": 0, "facility_clicks": {"speed": 0, "stamina": 0, "power": 0, "guts": 0, "wits": 0}}
+
+
 @server.get("/api/pal-defaults")
 def get_pal_defaults():
     from module.umamusume.user_data import read_pal_defaults
@@ -312,17 +348,9 @@ async def get_training_icon(name: str):
 
 
 
-BASE_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-
-
-@server.get("/race-icon/{race_name:path}")
-async def get_race_icon(race_name: str):
-    from urllib.parse import unquote
-    race_name = unquote(race_name)
-    file_path = os.path.join(BASE_DIR, "races", race_name + ".png")
-    if os.path.isfile(file_path):
-        return FileResponse(file_path, media_type="image/png")
-    file_path = os.path.join(BASE_DIR, "resource", "umamusume", "race", race_name + ".png")
+@server.get("/race-icon/{race_id}")
+async def get_race_icon(race_id: str):
+    file_path = os.path.join("resource", "umamusume", "race", race_id + ".png")
     if os.path.isfile(file_path):
         return FileResponse(file_path, media_type="image/png")
     return JSONResponse(status_code=404, content={"error": "not found"})

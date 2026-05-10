@@ -32,15 +32,22 @@ except Exception:
     pass
 
 from bot.base.task import TaskStatus
-import bot.conn.u2_ctrl as u2_ctrl
 from bot.base.manifest import register_app
 from bot.engine.scheduler import scheduler
 from module.umamusume.manifest import UmamusumeManifest
 from uvicorn import run
 
 log = logger.get_logger(__name__)
-_gpu_available = gpu_utils.detect_gpu_capabilities()
-_opencv_gpu = gpu_utils.configure_opencv_gpu()
+
+def cleanup_orphan_processes():
+    for proc in ("adb.exe",):
+        try:
+            subprocess.run(f"taskkill /F /IM {proc} /T 2>nul", shell=True, capture_output=True)
+        except Exception:
+            pass
+
+gpu_available = gpu_utils.detect_gpu_capabilities()
+opencv_gpu = gpu_utils.configure_opencv_gpu()
 
 start_time = 0
 end_time = 24
@@ -48,36 +55,15 @@ KEEPALIVE_ACTIVE = True
 DAILY_WAIT_OFFSET = random.randint(16, 188)
 DAILY_OFFSET_DAY = datetime.date.today()
 
-def _get_adb_path():
-    return os.path.join("deps", "adb", "adb.exe")
+from bot.conn.adb_client import AdbClient
 
-def _run_adb(args, timeout=15):
-    adb_path = _get_adb_path()
-    return subprocess.run([adb_path] + args, capture_output=True, text=True, encoding='utf-8', errors='replace', timeout=timeout)
-
-def restart_adb_server():
-    try:
-        _run_adb(["kill-server"], timeout=10)
-        time.sleep(1)
-    except Exception:
-        pass
-    try:
-        result = _run_adb(["start-server"], timeout=15)
-        time.sleep(2)
-        return result.returncode == 0
-    except Exception:
-        return False
-
-def check_adb_server_status():
-    try:
-        result = _run_adb(["version"], timeout=5)
-        return result.returncode == 0
-    except Exception:
-        return False
+def get_adb_client(device_id):
+    return AdbClient(device_id)
 
 def get_adb_devices():
     try:
-        result = _run_adb(["devices"], timeout=10)
+        tmp_client = AdbClient("")
+        result = tmp_client.run_cmd(["devices"], timeout=10)
         if result.returncode != 0:
             return []
         devices = []
@@ -132,50 +118,31 @@ def uninstall_uiautomator(device_id):
 
 def connect_to_device(device_id, max_retries=3):
     print(f"Connecting to {device_id}...")
+    client = get_adb_client(device_id)
     
     for attempt in range(1, max_retries + 1):
-        if not check_adb_server_status() and attempt > 1:
-            restart_adb_server()
+        try:
+            # Check version to see if server is up
+            if client.run_cmd(["version"], timeout=5).returncode != 0:
+                client.start_server()
+        except Exception:
+            client.start_server()
         
         if ":" in device_id:
+            client.connect()
+        
+        devices = get_adb_devices()
+        if device_id in devices:
             try:
-                result = _run_adb(["connect", device_id], timeout=10)
-                if "connected" not in result.stdout.lower() and "already connected" not in result.stdout.lower():
-                    if attempt < max_retries:
-                        restart_adb_server()
-                        continue
-            except subprocess.TimeoutExpired:
-                if attempt < max_retries:
-                    restart_adb_server()
-                    continue
+                result = client.run_cmd(["shell", "echo", "test"], timeout=15)
+                if result.returncode == 0 and "test" in result.stdout:
+                    print(f"Connected to {device_id}")
+                    return True
             except Exception:
                 pass
         
-        devices = get_adb_devices()
-        if device_id not in devices:
-            if attempt < max_retries:
-                restart_adb_server()
-                time.sleep(2)
-                continue
-            return False
-        
-        try:
-            result = _run_adb(["-s", device_id, "shell", "echo", "test"], timeout=15)
-            if result.returncode == 0 and "test" in result.stdout:
-                print(f"Connected to {device_id}")
-                return True
-        except Exception:
-            pass
-        
         if attempt < max_retries:
-            if attempt >= 1:
-                restart_adb_server()
-            if ":" in device_id and attempt >= 2:
-                try:
-                    _run_adb(["disconnect", device_id], timeout=5)
-                    time.sleep(1)
-                except Exception:
-                    pass
+            client.kill_server()
             time.sleep(attempt * 2)
     
     print(f"Failed to connect to {device_id}")
@@ -183,11 +150,34 @@ def connect_to_device(device_id, max_retries=3):
 
 def run_health_checks(device_id):
     try:
-        _run_adb(["-s", device_id, "exec-out", "screencap", "-p"], timeout=15)
-        _run_adb(["-s", device_id, "shell", "input", "keyevent", "0"], timeout=10)
+        client = get_adb_client(device_id)
+        client.run_cmd(["exec-out", "screencap", "-p"], timeout=15)
+        client.run_cmd(["shell", "input", "keyevent", "0"], timeout=10)
         return True
     except Exception:
         return True
+
+def validate_device_setup(device_id) -> bool:
+    client = get_adb_client(device_id)
+    res = client.run_cmd(["shell", "wm", "size"], timeout=10)
+    size_str = res.stdout.strip().split(":")[-1].strip()
+    
+    if not size_str:
+        return False
+        
+    w, h = map(int, size_str.split("x"))
+
+    dpi_res = client.run_cmd(["shell", "wm", "density"], timeout=10)
+    dpi = int(dpi_res.stdout.strip().split(":")[-1].strip())
+
+    ok = True
+    if w != 720 or h != 1280:
+        log.info(f"Resolution is {w}x{h}, expected 720x1280")
+        ok = False
+    if dpi != 180:
+        log.info(f"DPI is {dpi}, expected 180")
+        ok = False
+    return ok
 
 def normalize_start_end():
     global start_time, end_time
@@ -254,7 +244,8 @@ def time_window_enforcer(device_id: str):
         if is_in_allowed_window(now):
             if paused:
                 time.sleep(random.randint(16, 188))
-                u2_ctrl.INPUT_BLOCKED = False
+                from bot.base.runtime_state import get_state
+                get_state()["input_blocked"] = False
                 KEEPALIVE_ACTIVE = True
                 for tid in list(paused_task_ids):
                     if not str(tid).startswith("CRONJOB_"):
@@ -281,15 +272,17 @@ def time_window_enforcer(device_id: str):
                     save_scheduler_state()
                 except Exception:
                     pass
-                u2_ctrl.INPUT_BLOCKED = True
-                KEEPALIVE_ACTIVE = False
+                from bot.base.runtime_state import get_state
+                get_state()["input_blocked"] = True
                 try:
-                    _run_adb(["-s", device_id, "shell", "am", "force-stop", 
+                    get_adb_client(device_id).run_cmd(["shell", "am", "force-stop", 
                              "com.cygames.umamusume"], timeout=5)
                 except Exception:
                     pass
                 paused = True
-            
+
+            cleanup_orphan_processes()
+
             next_start = next_window_start(now)
             total_sec = int((next_start - now).total_seconds()) + int(DAILY_WAIT_OFFSET)
             if total_sec < 0:
@@ -304,6 +297,8 @@ if __name__ == '__main__':
         acquire_instance_lock()
     except Exception:
         pass
+
+    cleanup_orphan_processes()
 
     selected_device = None
     if os.environ.get("UAT_AUTORESTART", "0") == "1":
@@ -327,7 +322,10 @@ if __name__ == '__main__':
         sys.exit(1)
     
     uninstall_uiautomator(selected_device)
-    
+
+    if not validate_device_setup(selected_device):
+        log.info("Device validation failed")
+
     if not run_health_checks(selected_device):
         print("Health checks failed")
         sys.exit(1)
@@ -356,6 +354,13 @@ if __name__ == '__main__':
     
     register_app(UmamusumeManifest)
     
+    try:
+        import paddleocr as pocr
+        from bot.recog.ocr import set_paddleocr
+        set_paddleocr(pocr)
+    except Exception:
+        pass
+    
     restored = False
     was_active = None
     try:
@@ -375,14 +380,45 @@ if __name__ == '__main__':
         pass
     
     print("UAT running on http://127.0.0.1:8071")
-    if os.environ.get("UAT_AUTORESTART", "0") != "1":
+    if os.environ.get("UAT_AUTORESTART", "0") == "1":
+        try:
+            lock_path = os.path.join('userdata', 'restart.lock')
+            if os.path.exists(lock_path):
+                try:
+                    with open(lock_path, 'r') as f:
+                        old_pid = int(f.read().strip())
+                    import psutil
+                    wait_until = time.time() + 10
+                    while time.time() < wait_until and psutil.pid_exists(old_pid):
+                        time.sleep(0.3)
+                except Exception:
+                    time.sleep(1)
+                try:
+                    os.remove(lock_path)
+                except Exception:
+                    pass
+        except Exception:
+            pass
+        import subprocess
+        subprocess.run("powershell -Command \"Get-NetTCPConnection -LocalPort 8071 -ErrorAction SilentlyContinue | ForEach-Object { Stop-Process -Id $_.OwningProcess -Force }\"",
+                      shell=True, capture_output=True)
+        try:
+            run("bot.server.handler:server", host="127.0.0.1", port=8071, log_level="error")
+        except OSError as e:
+            if "10048" not in str(e):
+                raise
+            print("Port in use, killing and retrying...")
+            subprocess.run("powershell -Command \"Get-NetTCPConnection -LocalPort 8071 -ErrorAction SilentlyContinue | ForEach-Object { Stop-Process -Id $_.OwningProcess -Force }\"",
+                          shell=True, capture_output=True)
+            time.sleep(2)
+            run("bot.server.handler:server", host="127.0.0.1", port=8071, log_level="error")
+    else:
         threading.Thread(target=lambda: (time.sleep(1), __import__('webbrowser').open("http://127.0.0.1:8071")), daemon=True).start()
-    
-    try:
-        run("bot.server.handler:server", host="127.0.0.1", port=8071, log_level="error")
-    finally:
-        if ":" in selected_device:
-            try:
-                _run_adb(["disconnect", selected_device], timeout=5)
-            except Exception:
-                pass
+        try:
+            run("bot.server.handler:server", host="127.0.0.1", port=8071, log_level="error")
+        finally:
+            if ":" in selected_device:
+                try:
+                    _run_adb(["disconnect", selected_device], timeout=5)
+                except Exception:
+                    pass

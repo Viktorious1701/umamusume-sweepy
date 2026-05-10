@@ -102,3 +102,4 @@ export default {
 .item-qty { font-size: 13px; font-weight: 700; color: var(--accent); white-space: nowrap; flex-shrink: 0; margin-left: 8px }
 .empty-state { color: var(--muted); font-size: 13px; padding: 8px 0 }
 </style>
+

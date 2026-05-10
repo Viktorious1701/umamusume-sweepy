@@ -116,6 +116,7 @@ def sb_drag(ctx, from_y, to_y):
     sx = random.randint(SB_X_MIN, SB_X_MAX)
     ex = random.randint(SB_X_MIN, SB_X_MAX)
     dur = random.randint(166, 211)
+    from_y, to_y = max(110, from_y), max(110, to_y)
     ctx.ctrl.execute_adb_shell(
         "shell input swipe " + str(sx) + " " + str(from_y) + " " + str(ex) + " " + str(to_y) + " " + str(dur), True)
     time.sleep(0.15)
@@ -189,8 +190,8 @@ def script_follow_support_card_select(ctx: UmamusumeContext):
 
 
 def script_cultivate_finish(ctx: UmamusumeContext):
-    import bot.conn.u2_ctrl as u2c
-    u2c.IN_CAREER_RUN = False
+    from bot.base.runtime_state import get_state
+    get_state()["in_career_run"] = False
     try:
         from module.umamusume.persistence import clear_used_buffs, clear_megaphone_state
         clear_used_buffs()
@@ -342,9 +343,9 @@ def script_cultivate_learn_skill(ctx: UmamusumeContext):
     try:
         log.info("Priority list:")
         if isinstance(learn_skill_list, list):
-            for idx, plist in enumerate(learn_skill_list):
+            for idx, p_list in enumerate(learn_skill_list):
                 try:
-                    log.info(f"  priority {idx}: {', '.join(plist) if plist else ''}")
+                    log.info(f"  priority {idx}: {', '.join(p_list) if p_list else ''}")
                 except Exception:
                     pass
         bl = ctx.cultivate_detail.learn_skill_blacklist or []
@@ -411,8 +412,7 @@ def script_cultivate_learn_skill(ctx: UmamusumeContext):
         swipe_dur = max(5000, min(25000, int(est_frames * 600)))
 
         scan_x_end = _gauss_scan_x()
-        swipe_cmd = "shell input swipe " + str(SB_X) + " " + str(start_y) + " " + str(scan_x_end) + " " + str(TRACK_BOT) + " " + str(swipe_dur)
-        proc = ctx.ctrl.execute_adb_shell(swipe_cmd, False)
+        proc = ctx.ctrl.swipe_async(SB_X, start_y, scan_x_end, TRACK_BOT, swipe_dur)
 
         time.sleep(0.3)
         prev_frame = img
@@ -428,10 +428,7 @@ def script_cultivate_learn_skill(ctx: UmamusumeContext):
                     ctx.cultivate_detail.cultivate_finish and
                     hasattr(ctx.cultivate_detail, 'manual_purchase_completed') and
                     ctx.cultivate_detail.manual_purchase_completed):
-                    try:
-                        proc.terminate()
-                    except Exception:
-                        pass
+                    pass
                     early_exit = True
                     break
 
@@ -444,13 +441,10 @@ def script_cultivate_learn_skill(ctx: UmamusumeContext):
                     frame_sb_positions.append(sb_y)
                     futures.append(executor.submit(get_skill_list, curr, learn_skill_list, learn_skill_blacklist))
                     prev_frame = curr
-                if proc.poll() is not None:
+                if not proc.is_alive():
                     break
 
-            try:
-                proc.terminate()
-            except Exception:
-                pass
+            pass
 
             if not early_exit:
                 time.sleep(0.15)
@@ -503,10 +497,10 @@ def script_cultivate_learn_skill(ctx: UmamusumeContext):
     log.debug("Current skill state: " + str(skill_list))
 
     for s in skill_list:
-        sname = s.get("skill_name_raw") or s.get("skill_name", "")
-        if sname:
+        skill_name = s.get("skill_name_raw") or s.get("skill_name", "")
+        if skill_name:
             log_detected_skill(
-                sname, "menu",
+                skill_name, "menu",
                 hint_level=int(s.get("hint_level", 0)),
                 cost=int(s.get("skill_cost", 0)),
                 gold=bool(s.get("gold", False))
@@ -558,16 +552,16 @@ def script_cultivate_learn_skill(ctx: UmamusumeContext):
     log.info(f"Total skills to learn: {len(target_skill_list)}, points to spend: {curr_point}")
 
     for skill in target_skill_list:
-        ctx.task.detail.scenario_config.removeSkillFromResetList(skill)
+        ctx.task.detail.scenario_config.remove_skill_from_reset_list(skill)
 
     for skill in target_skill_list_raw:
-        for prioritylist in ctx.cultivate_detail.learn_skill_list:
-            if skill in prioritylist:
-                prioritylist.remove(skill)
+        for priority_list in ctx.cultivate_detail.learn_skill_list:
+            if skill in priority_list:
+                priority_list.remove(skill)
     for skill in skill_list:
-        for prioritylist in ctx.cultivate_detail.learn_skill_list:
-            if not skill['available'] and skill['skill_name_raw'] in prioritylist:
-                prioritylist.remove(skill['skill_name_raw'])
+        for priority_list in ctx.cultivate_detail.learn_skill_list:
+            if not skill['available'] and skill['skill_name_raw'] in priority_list:
+                priority_list.remove(skill['skill_name_raw'])
     ctx.cultivate_detail.learn_skill_list = [x for x in ctx.cultivate_detail.learn_skill_list if x]
 
     def _manual_purchase_confirmed():

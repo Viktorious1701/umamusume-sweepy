@@ -102,30 +102,34 @@ TITLE = [
     "Factor Confirmation",  # TITLE[33]
     "New Difficulty Unlocked",  # TITLE[34]
     # Aoharu Cup
-    "Auto Formation",  # TITLE[35]
-    "Battle Confirmation",  # TITLE[36]
-    "Rewards Collected",  # TITLE[37] after career if theres story
-    "Event Story Unlocked",  # TITLE[38] after career if theres story
-    "Connection Error",  # 39
-    "Data Update",  # 40
-    "Data Download",  # 41
-    "Date Changed",  # 42
-    "Unmet Requirements",  # 43 (Fail maiden race lmao just glue)
-    "Items Selected",  # 44
-    "Auto Select",  # 45
-    "Session Error",  # 46
-    "Choose Career Mode",  # 47
-    "Borrow Card",  # 48
-    "Insufficient Goal Race Result Pts",  # 49
-    "Shop",  # 50
-    "Exchange Complete",  # 51
-    "Career Complete",  # 52
-    "Training Items",  # 53
-    "Active Item Effects",  # 54
-    "Campaign",  # 55
-    "Notice",  # 56
-    "Event Bonus",  # 57
-    "Information",  # 58
+    "Auto Formation", # TITLE[35]
+    "Battle Confirmation", # TITLE[36]
+    "Rewards Collected", # TITLE[37] after career if theres story
+    "Event Story Unlocked", # TITLE[38] after career if theres story
+    "Connection Error", #39 
+    "Data Update", #40
+    "Data Download", #41
+    "Date Changed", #42
+    "Unmet Requirements", #43 (Fail maiden race lmao just glue)
+    "Items Selected", #44
+    "Auto Select", #45
+    "Session Error", #46
+    "Choose Career Mode", #47
+    "Borrow Card", #48
+    "Insufficient Goal Race Result Pts", #49
+    "Shop", #50
+     "Exchange Complete", #51
+    "Career Complete", # 52
+    "Training Items", # 53
+    "Active Item Effects", # 54
+    "Choose Recreation Partner", # 55
+    "Ranking", # 56
+    "Menu", # 57
+    "Career Profile", # 58
+    "Perks", # 59
+    "Support Effect Details", # 60
+    "Sparks", # 61
+    "Career Playthrough Difficulty", # 62
 ]
 
 
@@ -173,13 +177,19 @@ def script_info(ctx: UmamusumeContext):
                 log.warning(
                     f"Still no match with lower threshold - OCR: '{original_text}'")
                 try:
-                    # Attempt standard escape click
+                    from module.umamusume.asset.template import REF_NEXT
+                    img_full = getattr(ctx, 'current_screen_gray', None)
+                    if img_full is None:
+                        img_full = cv2.cvtColor(ctx.current_screen, cv2.COLOR_BGR2GRAY)
+                    next_match = image_match(img_full, REF_NEXT)
+                    if next_match.find_match:
+                        ctx.ctrl.click(next_match.center_point[0], next_match.center_point[1], "REF_NEXT")
+                        time.sleep(0.5)
+                        return
+                except Exception:
+                    pass
+                try:
                     ctx.ctrl.click_by_point(ESCAPE)
-                    log.info("fallback click ESCAPE")
-                    time.sleep(1)
-
-                    # Attempt to tap the standard confirm button location as a secondary fallback
-                    ctx.ctrl.click(360, 1180, "fallback confirm click")
                     time.sleep(1)
                 except Exception as e:
                     log.error(f"Fallback click failed: {e}")
@@ -189,16 +199,31 @@ def script_info(ctx: UmamusumeContext):
                     f"Found match with lower threshold: '{original_text}' -> '{title_text}'")
         else:
             log.info(f"Found match: '{original_text}' -> '{title_text}'")
+        
+        if title_text == ctx.cultivate_detail.last_title:
+            ctx.cultivate_detail.same_title_count += 1
+        else:
+            ctx.cultivate_detail.same_title_count = 1
+            ctx.cultivate_detail.last_title = title_text
 
-        # Debug: Show which TITLE index this matches to
-        try:
-            title_index = TITLE.index(title_text)
-            log.info(
-                f"DEBUG: title_text='{title_text}' matches TITLE[{title_index}]='{TITLE[title_index]}'")
-        except ValueError:
-            log.warning(
-                f"DEBUG: title_text='{title_text}' not found in TITLE array")
-
+        if ctx.cultivate_detail.same_title_count >= 3:
+            try:
+                from module.umamusume.asset.template import REF_NEXT, REF_NEXT2
+                img_full = getattr(ctx, 'current_screen_gray', None) or cv2.cvtColor(ctx.current_screen, cv2.COLOR_BGR2GRAY)
+                next_match = image_match(img_full, REF_NEXT)
+                if next_match.find_match:
+                    ctx.ctrl.click(next_match.center_point[0], next_match.center_point[1], "REF_NEXT")
+                    time.sleep(0.5)
+                next2_match = image_match(img_full, REF_NEXT2)
+                if next2_match.find_match:
+                    ctx.ctrl.click(next2_match.center_point[0], next2_match.center_point[1], "REF_NEXT2")
+                    time.sleep(0.5)
+            except Exception:
+                pass
+            ctx.cultivate_detail.same_title_count = 0
+            return
+        
+        
         # Force correct handler for "Confirm" - bypass TITLE array indexing issues
         if title_text == "Confirm":
             log.info("FORCED: Handling 'Confirm' (TP recovery) screen")
@@ -216,8 +241,7 @@ def script_info(ctx: UmamusumeContext):
                 if image_match(screen, REF_TP_RECOVER_DRINK).find_match:  # tp,
                     ctx.ctrl.click_by_point(USE_TP_DRINK)
                 else:
-                    # TODO:
-                    if ctx.cultivate_detail.allow_recover_tp == 2:  # TP
+                    if ctx.cultivate_detail.allow_recover_tp == 2:
                         ctx.ctrl.click_by_point(USE_CARROT_RECOVER_TP)
                     else:
                         reset_task(ctx.task.task_id)
@@ -244,7 +268,7 @@ def script_info(ctx: UmamusumeContext):
             ctx.ctrl.click_by_point(CULTIVATE_GOAL_RACE_INTER_3)
             time.sleep(0.5)
         if title_text == TITLE[54]:
-            ctx.ctrl.click_by_point(ESCAPE)
+            ctx.ctrl.back()
             time.sleep(0.5)
         # Campaign / Event Bonus
         if title_text in (TITLE[55], TITLE[56], TITLE[57], TITLE[58]):
@@ -307,39 +331,35 @@ def script_info(ctx: UmamusumeContext):
             time.sleep(0.5)
             ctx.ctrl.click_by_point(SCENARIO_SHORTEN_CONFIRM)
         if title_text == TITLE[8]:
-            ts_dates = getattr(ctx.cultivate_detail,
-                               'team_sirius_available_dates', [])
-            ts_priority = [d for d in ts_dates if d in (7, 5, 1, 4, 3)]
-            if getattr(ctx.cultivate_detail, 'team_sirius_enabled', False) and ts_priority:
-                ctx.ctrl.click_by_point(CULTIVATE_OPERATION_COMMON_CONFIRM)
-            elif getattr(ctx.cultivate_detail, 'team_sirius_enabled', False):
-                pass
+            img = ctx.current_screen
+            img_gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+            from module.umamusume.asset.template import UI_FRIEND_RECREATION, UI_FRIEND_RECREATION_COMPLETE
+
+            result_complete = image_match(img_gray, UI_FRIEND_RECREATION_COMPLETE)
+            log.info(f"Recreation complete match: {result_complete.find_match}")
+
+            if result_complete.find_match:
+                log.info("Recreation complete")
+                ctx.ctrl.click_by_point(CULTIVATE_TRIP_WITH_FRIEND_COMPLETE)
             else:
-                img = ctx.current_screen
-                img_gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-                from module.umamusume.asset.template import UI_FRIEND_RECREATION, UI_FRIEND_RECREATION_COMPLETE
+                result = image_match(img_gray, UI_FRIEND_RECREATION)
+                log.info(f"Friend recreation match: {result.find_match}")
 
-                result_complete = image_match(
-                    img_gray, UI_FRIEND_RECREATION_COMPLETE)
-                log.info(
-                    f"Recreation complete match: {result_complete.find_match}")
-
-                if result_complete.find_match:
-                    log.info("Recreation complete")
-                    ctx.ctrl.click_by_point(
-                        CULTIVATE_TRIP_WITH_FRIEND_COMPLETE)
+                if result.find_match:
+                    log.info("Friend recreation - clicking CULTIVATE_TRIP_WITH_FRIEND")
+                    ctx.ctrl.click_by_point(CULTIVATE_TRIP_WITH_FRIEND)
                 else:
-                    result = image_match(img_gray, UI_FRIEND_RECREATION)
-                    log.info(f"Friend recreation match: {result.find_match}")
-
-                    if result.find_match:
-                        log.info("Friend recreation")
-                        ctx.ctrl.click_by_point(CULTIVATE_TRIP_WITH_FRIEND)
-                    else:
-                        log.info("Regular recreation")
-                        ctx.ctrl.click_by_point(
-                            CULTIVATE_OPERATION_COMMON_CONFIRM)
-        if title_text == TITLE[9]:  # Confirmation
+                    log.info("Regular recreation")
+                    ctx.ctrl.click_by_point(CULTIVATE_OPERATION_COMMON_CONFIRM)
+        if title_text == TITLE[55]:
+            ctx.ctrl.click_by_point(CULTIVATE_OPERATION_COMMON_CONFIRM)
+        
+        if title_text in [TITLE[56], TITLE[57], TITLE[58], TITLE[59], TITLE[60], TITLE[61]]:
+            ctx.ctrl.back()
+            time.sleep(0.5)
+            return
+            
+        if title_text == TITLE[9]: #Confirmation
             ctx.ctrl.click_by_point(CULTIVATE_LEARN_SKILL_CONFIRM_AGAIN)
         if title_text == TITLE[10]:  # Skills Learned
             ctx.ctrl.click_by_point(CULTIVATE_LEARN_SKILL_DONE_CONFIRM)
@@ -796,4 +816,6 @@ def script_info(ctx: UmamusumeContext):
             ctx.ctrl.click(95, 1228)
         if title_text == TITLE[52]:
             ctx.ctrl.click(200, 805, "Career Complete to home")
+        if title_text == TITLE[62]:
+            ctx.ctrl.click(517, 1180, "Confirm difficulty")
         time.sleep(0.5)

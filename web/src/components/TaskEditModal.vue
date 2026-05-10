@@ -71,13 +71,16 @@
                 </div>
                 </div>
                 </div>
-              <div class="form-group mt-2">
-                <label>Training Data</label>
-                <div class="d-flex align-items-center gap-2">
-                  <span style="font-size:0.85em;color:var(--muted-2)">Press after changing config, deck, or uma to reset training score history</span>
-                  <button type="button" class="btn btn-sm btn-outline-danger" @click="clearCareerData">Clear Training Data</button>
-                </div>
-              </div>
+               <div class="form-group mt-2">
+                 <label>Training Data</label>
+                 <div class="d-flex align-items-center gap-2">
+                   <span style="font-size:0.85em;color:var(--muted-2)">Press after changing config, deck, or uma to reset training score history</span>
+                   <button type="button" class="btn btn-sm btn-outline-danger" @click="clearCareerData">Clear Training Data</button>
+                 </div>
+                  <div class="mt-1" style="font-size:0.85em;color:var(--muted-2)">
+                    Training history: {{ careerDataCount }}/2000
+                  </div>
+               </div>
               <div class="row" v-if="selectedScenario === 2">
                 <div class="col-4">
                   <div class="form-group">
@@ -139,9 +142,9 @@
                               <input type="number" class="form-control form-control-sm" style="width:60px" v-model.number="mantFocusSummerClassic" min="0" max="100" />
                               <label class="mant-threshold-label mb-0">Senior +</label>
                               <input type="number" class="form-control form-control-sm" style="width:60px" v-model.number="mantFocusSummerSenior" min="0" max="100" />
-                            </div>
-                          </div>
-                          <div class="mant-threshold-row">
+                             </div>
+                           </div>
+                           <div class="mant-threshold-row">
                             <img :src="getMantItemImg('coaching_megaphone')" class="mant-threshold-img" />
                             <div class="mant-threshold-controls">
                               <span class="mant-threshold-label">Coaching Megaphone</span>
@@ -516,29 +519,29 @@
                           <i class="fas fa-check" v-if="palSelected === palName"></i>
                         </button>
                       </div>
-                      <div class="pal-card-name">{{ palData.group === 'team_sirius' ? 'Team Sirius' : palName }}</div>
+                      <div class="pal-card-name">{{ this.isGroupCard(palData) ? (palData.group === 'team_sirius' ? 'Team Sirius' : palData.group) : palName }}</div>
                     </div>
                     <div v-if="palSelected === palName" class="pal-stages-list">
-                      <template v-if="Array.isArray(palData)">
-                        <div v-for="(stageData, stageIdx) in palData" :key="stageIdx" class="pal-stage-row">
+                      <template v-if="this.isFriendCard(palData)">
+                        <div v-for="(stageData, stageIdx) in this.getPalThresholds(palData)" :key="stageIdx" class="pal-stage-row">
                           <div class="stage-label">Stage {{ stageIdx + 1 }}</div>
                           <div class="stage-inputs">
                             <div class="input-group input-group-sm">
                               <span class="input-group-text">Mood</span>
-                              <input type="number" class="form-control" v-model.number="palCardStore[palName][stageIdx][0]" min="0" max="5">
+                              <input type="number" class="form-control" v-model.number="this.getPalThresholds(palData)[stageIdx][0]" min="0" max="5">
                             </div>
                             <div class="input-group input-group-sm">
                               <span class="input-group-text">Energy</span>
-                              <input type="number" class="form-control" v-model.number="palCardStore[palName][stageIdx][1]" min="0" max="100">
+                              <input type="number" class="form-control" v-model.number="this.getPalThresholds(palData)[stageIdx][1]" min="0" max="100">
                             </div>
                             <div class="input-group input-group-sm">
                               <span class="input-group-text">Score</span>
-                              <input type="number" step="0.01" class="form-control" v-model.number="palCardStore[palName][stageIdx][2]" min="0" max="1">
+                              <input type="number" step="0.01" class="form-control" v-model.number="this.getPalThresholds(palData)[stageIdx][2]" min="0" max="1">
                             </div>
                           </div>
                         </div>
                       </template>
-                      <template v-else-if="palData.group === 'team_sirius'">
+                      <template v-else-if="this.isGroupCard(palData)">
                         <div class="pal-stage-row">
                           <div class="stage-label">Percentile</div>
                           <div class="stage-inputs">
@@ -655,66 +658,73 @@
                 </div>
               </div>
 
-              <div class="hint-boost-section mt-3 mb-3" v-for="(fsg, fsgIdx) in friendshipScoreGroups" :key="'fsg-'+fsgIdx">
-                <div class="hint-boost-header" @click="fsg.expanded = !fsg.expanded">
+              <div class="friendship-calib-section mt-3 mb-3">
+                <div class="hint-boost-header" @click="showCharSelector = !showCharSelector">
                   <div class="hint-boost-title">
-                    <i class="fas fa-heart"></i>
-                    Friendship score{{ fsgIdx > 0 ? ' ' + (fsgIdx + 1) : '' }}
+                    Friendship Calibration
                   </div>
                   <div class="hint-boost-toggle">
-                    <span v-if="fsg.characters.length" class="hint-boost-badge">{{ fsg.characters.length }} selected · {{ fsg.multiplier }}%</span>
-                    <span class="toggle-text">{{ fsg.expanded ? 'Hide' : 'Show' }}</span>
-                    <i class="fas" :class="fsg.expanded ? 'fa-chevron-up' : 'fa-chevron-down'"></i>
+                    <span v-if="selectedFriendshipCharacters.length" class="hint-boost-badge me-2">{{ selectedFriendshipCharacters.length }} calibrated</span>
+                    <span class="toggle-text">{{ showCharSelector ? 'Hide' : 'Show' }}</span>
+                    <i class="fas" :class="showCharSelector ? 'fa-chevron-up' : 'fa-chevron-down'"></i>
                   </div>
                 </div>
-                <div v-if="fsg.expanded" class="hint-boost-content">
-                  <p style="font-size: 0.85em; color: var(--muted); margin-bottom: 10px;">
-                    Multiplies the blue and green friendship scores of selected characters by this %
-                  </p>
-                  <div class="row align-items-center mb-3">
-                    <div class="col-md-4 col-6">
-                      <label class="mb-1">Friendship Multiplier</label>
-                      <div class="hint-slider-group">
-                        <input type="range" class="hint-slider" v-model.number="fsg.multiplier" min="0" max="200" step="5">
-                        <div class="input-group input-group-sm" style="width:110px;">
-                          <input type="number" class="form-control" v-model.number="fsg.multiplier" min="0" max="200" step="5">
-                          <span class="input-group-text">%</span>
-                        </div>
-                      </div>
-                    </div>
-                    <div class="col-md-4 col-6">
-                      <label class="mb-1">Search</label>
-                      <input type="text" class="form-control form-control-sm" v-model="fsg.search" placeholder="Search characters...">
-                    </div>
-                    <div class="col-md-4 col-6 d-flex align-items-end" style="padding-top: 4px;">
-                      <button type="button" class="btn btn-sm btn-outline-secondary" @click="fsg.characters = []">Clear All</button>
-
+                
+                <div v-if="showCharSelector" class="hint-boost-content p-3" style="border: 1px solid rgba(255,255,255,0.08); border-top: none; border-radius: 0 0 8px 8px; margin-top: -11px; background: rgba(0,0,0,0.1);">
+                  <div class="mb-3">
+                    <input type="text" class="form-control form-control-sm" v-model="friendshipTabSearch" placeholder="Search characters to calibrate...">
+                  </div>
+                  <div class="hint-char-grid mb-3">
+                    <div v-for="name in filteredFriendshipCharacters" :key="name"
+                      class="hint-char-item" :class="{ selected: selectedFriendshipCharacters.includes(name) }"
+                      @click="toggleFriendshipCharacter(name)">
+                      <img :src="'/training-icon/' + encodeURIComponent(name)" class="hint-char-icon" loading="lazy" @error="$event.target.style.display='none'">
+                      <span class="hint-char-name">{{ name }}</span>
                     </div>
                   </div>
-                  <div v-if="fsg.characters.length" class="hint-boost-selected mb-2">
-                    <div v-for="name in fsg.characters" :key="'fsg-sel-'+fsgIdx+'-'+name" class="hint-chip selected" @click="toggleFsgCharacter(fsgIdx, name)">
+
+                  <div v-if="selectedFriendshipCharacters.length" class="hint-boost-selected mb-3">
+                    <div v-for="name in selectedFriendshipCharacters" :key="'chip-'+name" class="hint-chip selected" @click="toggleFriendshipCharacter(name)">
                       <img :src="'/training-icon/' + encodeURIComponent(name)" class="hint-chip-icon" loading="lazy" @error="$event.target.style.display='none'">
                       <span>{{ name }}</span>
                       <i class="fas fa-times hint-chip-remove"></i>
                     </div>
                   </div>
-                  <div class="hint-char-grid">
-                    <div v-for="name in filteredFsgCharacters(fsgIdx)" :key="'fsg-'+fsgIdx+'-'+name"
-                      class="hint-char-item" :class="{ selected: fsg.characters.includes(name) }"
-                      @click="toggleFsgCharacter(fsgIdx, name)">
-                      <img :src="'/training-icon/' + encodeURIComponent(name)" class="hint-char-icon" loading="lazy" @error="$event.target.style.display='none'">
-                      <span class="hint-char-name">{{ name }}</span>
+
+                  <div class="friendship-calib-list">
+                    <div v-for="name in selectedFriendshipCharacters" :key="'calib-' + name" class="mb-2">
+                      <div class="advanced-options-header" @click="getCharacterConfig(name).expanded = !getCharacterConfig(name).expanded">
+                        <div class="advanced-options-title d-flex align-items-center">
+                          <img :src="'/training-icon/' + encodeURIComponent(name)" style="width: 20px; height: 20px; border-radius: 50%;" class="me-2">
+                          {{ name }}
+                        </div>
+                        <div class="advanced-options-toggle">
+                          <i class="fas" :class="getCharacterConfig(name).expanded ? 'fa-chevron-up' : 'fa-chevron-down'"></i>
+                        </div>
+                      </div>
+                      
+                      <div v-if="getCharacterConfig(name).expanded" class="p-3 rounded-bottom" style="background: rgba(255,255,255,0.02); border: 1px solid rgba(255,255,255,0.08); border-top: none;">
+                        <div class="row g-2">
+                          <div v-for="period in ['junior', 'classic', 'senior']" :key="name + '-' + period" class="col-md-4">
+                            <div class="small fw-bold text-uppercase mb-2 text-muted" style="letter-spacing: 0.5px; font-size: 10px;">{{ period }}</div>
+                            <div class="input-group input-group-sm mb-1">
+                              <span class="input-group-text" style="width: 60px; font-size: 10px; background: rgba(255,255,255,0.05); color: #888; border-color: rgba(255,255,255,0.1);">Blue</span>
+                              <input type="number" step="0.01" class="form-control" style="background: rgba(0,0,0,0.2); color: #fff; border-color: rgba(255,255,255,0.1);" v-model.number="getCharacterConfig(name)[period].blue">
+                            </div>
+                            <div class="input-group input-group-sm mb-1">
+                              <span class="input-group-text" style="width: 60px; font-size: 10px; background: rgba(255,255,255,0.05); color: #888; border-color: rgba(255,255,255,0.1);">Green</span>
+                              <input type="number" step="0.01" class="form-control" style="background: rgba(0,0,0,0.2); color: #fff; border-color: rgba(255,255,255,0.1);" v-model.number="getCharacterConfig(name)[period].green">
+                            </div>
+                            <div class="input-group input-group-sm">
+                              <span class="input-group-text" style="width: 60px; font-size: 10px; background: rgba(255,255,255,0.05); color: #888; border-color: rgba(255,255,255,0.1);">Yellow</span>
+                              <input type="number" step="0.01" class="form-control" style="background: rgba(0,0,0,0.2); color: #fff; border-color: rgba(255,255,255,0.1);" v-model.number="getCharacterConfig(name)[period].yellow">
+                            </div>
+                          </div>
+                        </div>
+                      </div>
                     </div>
                   </div>
                 </div>
-              </div>
-              <div class="mb-3">
-                <button type="button" class="btn btn-sm btn-outline-secondary" @click="friendshipScoreGroups.push({ characters: [], multiplier: 100, search: '', expanded: false })">
-                  <i class="fas fa-plus"></i> Add new folder
-                </button>
-                <button v-if="friendshipScoreGroups.length > 1" type="button" class="btn btn-sm btn-outline-danger ms-2" @click="friendshipScoreGroups.pop()">
-                  <i class="fas fa-trash"></i> Delete folder
-                </button>
               </div>
 
               <div>
@@ -1114,6 +1124,45 @@
                       </div>
                     </div>
                   </div>
+                </div>
+
+                <hr style="border-color: var(--accent); opacity: 0.5; margin: 12px 0;">
+                <div class="form-group" style="margin-top: 16px;">
+                  <div style="color: var(--accent); display: flex; align-items: center; justify-content: space-between;">
+                    <span>Investment Scoring</span>
+                    <small style="color: #888;">Bonus = Base + (Scale × Clicks × Ratio)</small>
+                  </div>
+                </div>
+
+                <div class="table-responsive">
+                  <table class="table table-sm table-bordered facility-period-table">
+                    <thead>
+                      <tr>
+                        <th style="width: 40px;">On</th>
+                        <th>Period</th>
+                        <th>Base</th>
+                        <th>Scale</th>
+                        <th>Spd</th>
+                        <th>Sta</th>
+                        <th>Pow</th>
+                        <th>Gut</th>
+                        <th>Wit</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <tr v-for="(period, idx) in facilityPeriodConfigs" :key="idx">
+                        <td class="text-center">
+                          <input type="checkbox" v-model="period.enabled">
+                        </td>
+                        <td><small>{{ period.name }}</small></td>
+                        <td><input type="number" step="1" v-model.number="period.base" class="form-control form-control-sm"></td>
+                        <td><input type="number" step="0.1" v-model.number="period.scale" class="form-control form-control-sm"></td>
+                        <td v-for="(name, i) in ['Spd', 'Sta', 'Pow', 'Gut', 'Wit']" :key="i">
+                          <input type="number" step="0.1" v-model.number="period.ratios[i]" class="form-control form-control-sm" style="min-width: 50px;">
+                        </td>
+                      </tr>
+                    </tbody>
+                  </table>
                 </div>
 
                 <hr style="border-color: var(--accent); opacity: 0.5; margin: 12px 0;">
@@ -1831,6 +1880,7 @@
   white-space: nowrap;
 }
 
+
 .pal-config-section {
   border: 1px solid var(--accent);
   border-radius: 8px;
@@ -2050,14 +2100,16 @@ export default {
 
     SupportCardSelectModal
   },
-  created() {
-    if (typeof this.loadEventList === 'function') {
-      this.loadEventList();
-    }
-        this.mantItemTiers = this.mantGetDefaultTiers();
-        this.mantTierCount = 8;
-        this.mantTierThresholds = {"3":51,"7":300,"8":99999999999};
-  },
+   created() {
+     if (typeof this.loadEventList === 'function') {
+       this.loadEventList();
+     }
+         this.mantItemTiers = this.mantGetDefaultTiers();
+         this.mantTierCount = 8;
+         this.mantTierThresholds = {"3":51,"7":300,"8":99999999999};
+     this.initSelect();
+     this.getPresets();
+   },
   data: function () {
     return {
       sectionList: [
@@ -2086,6 +2138,7 @@ export default {
       showTurf: true,
       showDirt: true,
       showSprint: true,
+      careerDataCount: 0,
       showMile: true,
       showMedium: true,
       showLong: true,
@@ -2120,12 +2173,12 @@ export default {
       mantWhistleFocusSummer: true,
       mantFocusSummerClassic: 20,
       mantFocusSummerSenior: 10,
-      mantMegaSmallThreshold: 37,
-      mantMegaMediumThreshold: 42,
-      mantMegaLargeThreshold: 47,
+      mantMegaSmallThreshold: 60,
+      mantMegaMediumThreshold: 70,
+      mantMegaLargeThreshold: 80,
       mantMegaRacePenalty: 5,
       mantMegaSummerBonus: 10,
-      mantTrainingWeightsThreshold: 40,
+      mantTrainingWeightsThreshold: 60,
       mantBbqUnmaxxedCards: 3,
       mantCharmThreshold: 40,
       mantCharmFailureRate: 21,
@@ -2244,6 +2297,29 @@ export default {
       spiritExplosionSeniorAfterSummer: [0.16, 0.16, 0.16, 0.06, 0.11],
       spiritExplosionFinale: [0.16, 0.16, 0.16, 0.06, 0.11],
 
+      facilityRatios: [1.0, 1.0, 1.0, 1.0, 1.0],
+      facilityPeriodConfigs: [
+        { name: 'Turns 1-12', enabled: false, base: 0.0, scale: 0.0, ratios: [1.0, 1.0, 1.0, 1.0, 1.0] },
+        { name: 'Turns 13-24', enabled: false, base: 0.0, scale: 0.0, ratios: [1.0, 1.0, 1.0, 1.0, 1.0] },
+        { name: 'Turns 25-36', enabled: false, base: 0.0, scale: 0.0, ratios: [1.0, 1.0, 1.0, 1.0, 1.0] },
+        { name: 'Turns 37-48', enabled: false, base: 0.0, scale: 0.0, ratios: [1.0, 1.0, 1.0, 1.0, 1.0] },
+        { name: 'Turns 49-60', enabled: false, base: 0.0, scale: 0.0, ratios: [1.0, 1.0, 1.0, 1.0, 1.0] },
+        { name: 'Turns 61-72', enabled: false, base: 0.0, scale: 0.0, ratios: [1.0, 1.0, 1.0, 1.0, 1.0] }
+      ],
+
+      eventWeightsJunior: {
+        Friendship: 35, Speed: 10, Stamina: 10, Power: 10, Guts: 20, Wits: 1,
+        Hint: 100, 'Skill Points': 10
+      },
+      eventWeightsClassic: {
+        Friendship: 20, Speed: 10, Stamina: 10, Power: 10, Guts: 20, Wits: 1,
+        Hint: 100, 'Skill Points': 10
+      },
+      eventWeightsSenior: {
+        Friendship: 0, Speed: 10, Stamina: 10, Power: 10, Guts: 20, Wits: 1,
+        Hint: 100, 'Skill Points': 10
+      },
+
       motivationThresholdYear1: 3,
       motivationThresholdYear2: 4,
       motivationThresholdYear3: 4,
@@ -2257,10 +2333,11 @@ export default {
       hintBoostMultiplier: 100,
       hintBoostSearch: '',
       showHintBoostPanel: false,
-      friendshipScoreGroups: [
-        { characters: [], multiplier: 100, search: '', expanded: false },
-        { characters: [], multiplier: 100, search: '', expanded: false }
-      ],
+      showCharSelector: false,
+      friendshipSearch: '',
+      characterScoreConfigs: {},
+      selectedFriendshipCharacters: [],
+      friendshipTabSearch: '',
       allTrainingCharacters: [],
       npcScoreJunior: [0.05, 0.05, 0.05],
       npcScoreClassic: [0.05, 0.05, 0.05],
@@ -2297,47 +2374,17 @@ export default {
       availableDistances: ['', 'Sprint', 'Mile', 'Medium', 'Long'],
       availableTiers: ['', 'SS', 'S', 'A', 'B', 'C', 'D'],
       availableRarities: ['', 'Unique', 'Rare', 'Normal'],
-      showSkillList: false
-      , showPresetMenu: false,
+
+      showSkillList: false,
+      showPresetMenu: false,
       sharePresetText: '',
 
       showSlotPopup: false,
       slotPopupRaces: [],
       slotPopupTitle: '',
 
-            draggingSkillName: null,
+      draggingSkillName: null,
       dragOrigin: null,
-      
-      eventWeightsJunior: {
-        Friendship: 35,
-        Speed: 10,
-        Stamina: 10,
-        Power: 10,
-        Guts: 20,
-        Wits: 1,
-        Hint: 100,
-        'Skill Points': 10
-      },
-      eventWeightsClassic: {
-        Friendship: 20,
-        Speed: 10,
-        Stamina: 10,
-        Power: 10,
-        Guts: 20,
-        Wits: 1,
-        Hint: 100,
-        'Skill Points': 10
-      },
-      eventWeightsSenior: {
-        Friendship: 0,
-        Speed: 10,
-        Stamina: 10,
-        Power: 10,
-        Guts: 20,
-        Wits: 1,
-        Hint: 100,
-        'Skill Points': 10
-      },
       dropHoverTarget: null,
       didValidDrop: false,
 
@@ -2365,12 +2412,26 @@ export default {
         { op: '>', val: 48, val2: 0, tactic: 3 }
       ],
       showTurnInfo: false,
-          }
+    };
   },
-  mounted() {
-        window.addEventListener('dragend', this.onGlobalDragEnd, false);
-    window.addEventListener('drop', this.onGlobalDrop, false);
-  },
+    mounted() {
+      this.loadCharacterData();
+      this.loadEventList();
+      this.loadRaceData();
+      this.loadSkillData();
+      this.loadTrainingCharacters();
+      this.initSelect();
+      this.getPresets();
+      this.loadPalCardStore();
+      this.fetchCareerDataCount();
+      this.successToast = $('#liveToast').toast({});
+      this.$nextTick(() => {
+        this.initScrollSpy();
+        this.normalizeScoreArrays(this.selectedScenario === 2 ? 5 : 4);
+      });
+      window.addEventListener('dragend', this.onGlobalDragEnd, false);
+      window.addEventListener('drop', this.onGlobalDrop, false);
+    },
   beforeUnmount() {
     window.removeEventListener('dragend', this.onGlobalDragEnd, false);
     window.removeEventListener('drop', this.onGlobalDrop, false);
@@ -2382,6 +2443,11 @@ export default {
     filteredHintCharacters() {
       if (!this.hintBoostSearch) return this.allTrainingCharacters;
       const q = this.hintBoostSearch.toLowerCase();
+      return this.allTrainingCharacters.filter(n => n.toLowerCase().includes(q));
+    },
+    filteredFriendshipCharacters() {
+      if (!this.friendshipTabSearch) return this.allTrainingCharacters;
+      const q = this.friendshipTabSearch.toLowerCase();
       return this.allTrainingCharacters.filter(n => n.toLowerCase().includes(q));
     },
     filteredRaces_1() {
@@ -2403,29 +2469,23 @@ export default {
           (race.distance === 'Mile' && this.showMile) ||
           (race.distance === 'Medium' && this.showMedium) ||
           (race.distance === 'Long' && this.showLong);
-
         let matchesCharacter = true;
         if (this.selectedCharacter) {
           const character = this.characterList.find(c => c.name === this.selectedCharacter);
           if (character) {
             const matchesCharacterTerrain = race.terrain === character.terrain;
-
             const characterDistances = character.distance.split(', ').map(d => d.trim());
             const matchesCharacterDistance = characterDistances.includes(race.distance);
-
             const matchesAptitude = matchesCharacterTerrain && matchesCharacterDistance;
-
             const characterPeriods = this.characterTrainingPeriods[this.selectedCharacter];
             const matchesTrainingPeriod = characterPeriods && (
               (characterPeriods['Junior Year'] && characterPeriods['Junior Year'].includes(race.date)) ||
               (characterPeriods['Classic Year'] && characterPeriods['Classic Year'].includes(race.date)) ||
               (characterPeriods['Senior Year'] && characterPeriods['Senior Year'].includes(race.date))
             );
-
             matchesCharacter = matchesAptitude && matchesTrainingPeriod;
           }
         }
-
         return matchesSearch && matchesType && matchesTerrain && matchesDistance && matchesCharacter;
       });
     },
@@ -2448,29 +2508,23 @@ export default {
           (race.distance === 'Mile' && this.showMile) ||
           (race.distance === 'Medium' && this.showMedium) ||
           (race.distance === 'Long' && this.showLong);
-
         let matchesCharacter = true;
         if (this.selectedCharacter) {
           const character = this.characterList.find(c => c.name === this.selectedCharacter);
           if (character) {
             const matchesCharacterTerrain = race.terrain === character.terrain;
-
             const characterDistances = character.distance.split(', ').map(d => d.trim());
             const matchesCharacterDistance = characterDistances.includes(race.distance);
-
             const matchesAptitude = matchesCharacterTerrain && matchesCharacterDistance;
-
             const characterPeriods = this.characterTrainingPeriods[this.selectedCharacter];
             const matchesTrainingPeriod = characterPeriods && (
               (characterPeriods['Junior Year'] && characterPeriods['Junior Year'].includes(race.date)) ||
               (characterPeriods['Classic Year'] && characterPeriods['Classic Year'].includes(race.date)) ||
               (characterPeriods['Senior Year'] && characterPeriods['Senior Year'].includes(race.date))
             );
-
             matchesCharacter = matchesAptitude && matchesTrainingPeriod;
           }
         }
-
         return matchesSearch && matchesType && matchesTerrain && matchesDistance && matchesCharacter;
       });
     },
@@ -2493,38 +2547,30 @@ export default {
           (race.distance === 'Mile' && this.showMile) ||
           (race.distance === 'Medium' && this.showMedium) ||
           (race.distance === 'Long' && this.showLong);
-
         let matchesCharacter = true;
         if (this.selectedCharacter) {
           const character = this.characterList.find(c => c.name === this.selectedCharacter);
           if (character) {
             const matchesCharacterTerrain = race.terrain === character.terrain;
-
             const characterDistances = character.distance.split(', ').map(d => d.trim());
             const matchesCharacterDistance = characterDistances.includes(race.distance);
-
             const matchesAptitude = matchesCharacterTerrain && matchesCharacterDistance;
-
             const characterPeriods = this.characterTrainingPeriods[this.selectedCharacter];
             const matchesTrainingPeriod = characterPeriods && (
               (characterPeriods['Junior Year'] && characterPeriods['Junior Year'].includes(race.date)) ||
               (characterPeriods['Classic Year'] && characterPeriods['Classic Year'].includes(race.date)) ||
               (characterPeriods['Senior Year'] && characterPeriods['Senior Year'].includes(race.date))
             );
-
             matchesCharacter = matchesAptitude && matchesTrainingPeriod;
           }
         }
-
         return matchesSearch && matchesType && matchesTerrain && matchesDistance && matchesCharacter;
       });
     },
     skillsByTypePriority0() {
       const grouped = {};
       this.skillPriority0.forEach(skill => {
-        if (!grouped[skill.skill_type]) {
-          grouped[skill.skill_type] = [];
-        }
+        if (!grouped[skill.skill_type]) grouped[skill.skill_type] = [];
         grouped[skill.skill_type].push(skill);
       });
       return grouped;
@@ -2532,9 +2578,7 @@ export default {
     skillsByTypePriority1() {
       const grouped = {};
       this.skillPriority1.forEach(skill => {
-        if (!grouped[skill.skill_type]) {
-          grouped[skill.skill_type] = [];
-        }
+        if (!grouped[skill.skill_type]) grouped[skill.skill_type] = [];
         grouped[skill.skill_type].push(skill);
       });
       return grouped;
@@ -2542,9 +2586,7 @@ export default {
     skillsByTypePriority2() {
       const grouped = {};
       this.skillPriority2.forEach(skill => {
-        if (!grouped[skill.skill_type]) {
-          grouped[skill.skill_type] = [];
-        }
+        if (!grouped[skill.skill_type]) grouped[skill.skill_type] = [];
         grouped[skill.skill_type].push(skill);
       });
       return grouped;
@@ -2553,9 +2595,7 @@ export default {
       const allSkills = skillsData;
       const grouped = {};
       allSkills.forEach(skill => {
-        if (!grouped[skill.skill_type]) {
-          grouped[skill.skill_type] = [];
-        }
+        if (!grouped[skill.skill_type]) grouped[skill.skill_type] = [];
         grouped[skill.skill_type].push(skill);
       });
       return grouped;
@@ -2563,7 +2603,6 @@ export default {
     filteredSkillsByType() {
       const { strategy, distance, tier, rarity, query } = this.skillFilter;
       const allSkills = skillsData;
-
       const filteredSkills = allSkills.filter(skill => {
         const matchesStrategy = !strategy || (skill.strategy && skill.strategy === strategy);
         const matchesDistance = !distance || (skill.distance && skill.distance === distance);
@@ -2575,15 +2614,11 @@ export default {
           (skill.description && skill.description.toLowerCase().includes(q));
         return matchesStrategy && matchesDistance && matchesTier && matchesRarity && matchesQuery;
       });
-
       const grouped = {};
       filteredSkills.forEach(skill => {
-        if (!grouped[skill.skill_type]) {
-          grouped[skill.skill_type] = [];
-        }
+        if (!grouped[skill.skill_type]) grouped[skill.skill_type] = [];
         grouped[skill.skill_type].push(skill);
       });
-
       return grouped;
     },
     turnReferenceColumns() {
@@ -2591,23 +2626,19 @@ export default {
       const years = ["Junior", "Classic", "Senior"];
       const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
       const halves = ["Early", "Late"];
-
       for (let turn = 12; turn <= 77; turn++) {
         let desc = "";
-        
         if (turn === 12) {
-           desc = "Debut";
+          desc = "Debut";
         } else if (turn <= 72) {
-          const absIndex = turn - 1; 
-          
+          const absIndex = turn - 1;
           const yearIdx = Math.floor(absIndex / 24);
           const monthIdx = Math.floor((absIndex % 24) / 2);
           const halfIdx = absIndex % 2;
-
           if (yearIdx < years.length) {
             desc = `${years[yearIdx]} ${halves[halfIdx]} ${months[monthIdx]}`;
           } else {
-             desc = "Unknown";
+            desc = "Unknown";
           }
         } else {
           if (turn === 73) desc = "URA Qualifiers";
@@ -2617,61 +2648,59 @@ export default {
           else if (turn === 77) desc = "URA Finals";
           else desc = "Post-Game";
         }
-
         const colIdx = Math.floor((turn - 12) / 11);
-        if (colIdx < 6) {
-          columns[colIdx].push({ turn, desc });
-        }
+        if (colIdx < 6) columns[colIdx].push({ turn, desc });
       }
       return columns;
     }
   },
-  mounted() {
-    this.loadCharacterData()
-    this.loadEventList()
-    this.loadRaceData()
-    this.loadSkillData()
-    this.loadTrainingCharacters()
-    this.initSelect()
-    this.getPresets()
-    this.loadPalCardStore()
-    this.successToast = $('#liveToast').toast({})
-    this.$nextTick(() => {
-      this.initScrollSpy()
-      this.normalizeScoreArrays(this.selectedScenario === 2 ? 5 : 4)
-    })
-  },
-  watch: {
-    selectedScenario(newVal) {
-      this.normalizeScoreArrays(newVal === 2 ? 5 : 4)
-    },
-    scoreValueJunior(val) {
-      if (this.selectedScenario === 2 && Array.isArray(val) && val.length < 5) {
-        this.scoreValueJunior = [...val, ...Array(5 - val.length).fill(0.15)]
+  methods: {
+    normalizePalEntry(key, val) {
+      if (Array.isArray(val)) {
+        return { type: 'friend', thresholds: val };
       }
-    },
-    scoreValueClassic(val) {
-      if (this.selectedScenario === 2 && Array.isArray(val) && val.length < 5) {
-        this.scoreValueClassic = [...val, ...Array(5 - val.length).fill(0.12)]
+      if (typeof val === 'object' && val !== null) {
+        if (val.type === 'friend' || val.type === 'group') {
+          if (val.type === 'friend' && !val.thresholds) {
+            return { ...val, thresholds: [] };
+          }
+          return val;
+        }
+        if (val.group) {
+          return { ...val, type: 'group' };
+        }
+        if (val.thresholds && Array.isArray(val.thresholds)) {
+          return { ...val, type: 'friend' };
+        }
+        return { ...val, type: 'friend' };
       }
+      return val;
     },
-    scoreValueSenior(val) {
-      if (this.selectedScenario === 2 && Array.isArray(val) && val.length < 5) {
-        this.scoreValueSenior = [...val, ...Array(5 - val.length).fill(0.09)]
+
+    getPalThresholds(palData) {
+      if (Array.isArray(palData)) return palData;
+      if (palData && typeof palData === 'object') {
+        if (Array.isArray(palData.thresholds)) return palData.thresholds;
       }
+      return null;
     },
-    scoreValueSeniorAfterSummer(val) {
-      if (this.selectedScenario === 2 && Array.isArray(val) && val.length < 5) {
-        this.scoreValueSeniorAfterSummer = [...val, ...Array(5 - val.length).fill(0.07)]
-      }
+
+    isGroupCard(palData) {
+      if (!palData || typeof palData !== 'object' || Array.isArray(palData)) return false;
+      const ptype = palData.type;
+      if (ptype === 'group') return true;
+      if (ptype === 'friend') return false;
+      return !!palData.group;
     },
-    scoreValueFinale(val) {
-      if (this.selectedScenario === 2 && Array.isArray(val) && val.length < 5) {
-        this.scoreValueFinale = [...val, ...Array(5 - val.length).fill(0)]
-      }
-    }
-  },
-    methods: {
+
+    isFriendCard(palData) {
+      if (Array.isArray(palData)) return true;
+      if (!palData || typeof palData !== 'object') return false;
+      const ptype = palData.type;
+      if (ptype === 'friend') return true;
+      if (ptype === 'group') return false;
+      return !palData.group;
+    },
     getTurnFromDate(dateStr) {
       if (!dateStr) return '?';
       let y = 0, m = 0, h = 0;
@@ -2698,11 +2727,25 @@ export default {
           if (res && res.data) {
             const apiStore = res.data;
             for (const key in apiStore) {
-              this.palCardStore[key] = apiStore[key];
+              
+              this.palCardStore[key] = this.normalizePalEntry(key, apiStore[key]);
+            }
+            
+            if (!this.palCardStore['team_sirius']) {
+              this.palCardStore['team_sirius'] = { type: 'group', group: 'team_sirius', enabled: false, percentile: 26 };
             }
             const palNames = Object.keys(this.palCardStore);
             if (palNames.length > 0 && !this.palSelected) {
-              this.palSelected = palNames[0];
+              
+              const firstFriend = palNames.find(n => this.isFriendCard(this.palCardStore[n]));
+              this.palSelected = firstFriend || palNames[0];
+            }
+            if (this.palSelected && this.isFriendCard(this.palCardStore[this.palSelected])) {
+              for (const v of Object.values(this.palCardStore)) {
+                if (this.isGroupCard(v)) {
+                  v.enabled = false;
+                }
+              }
             }
           }
         })
@@ -2744,26 +2787,54 @@ export default {
     this.showPalConfigPanel = !this.showPalConfigPanel;
     },
     togglePalCardSelection(palName) {
-    if (this.palSelected === palName) {
-      const entry = this.palCardStore[palName];
-      if (entry && typeof entry === 'object' && entry.group) {
-        entry.enabled = false;
-        if (!this.palCardStore['team_sirius']?.enabled) {
+      if (this.palSelected === palName) {
+        
+        const entry = this.palCardStore[palName];
+        if (this.isGroupCard(entry)) {
+          entry.enabled = false;
+        }
+        this.prioritizeRecreation = false;
+        this.palSelected = null;
+      } else {
+        
+        const entry = this.palCardStore[palName];
+        if (this.isGroupCard(entry)) {
+          // Group card: toggle enabled flag, clear friend card state
+          entry.enabled = true;
           this.prioritizeRecreation = false;
+          this.palSelected = palName;
+        } else {
+          // Friend card: select it, set prioritize_recreation, disable any group cards
+          this.prioritizeRecreation = true;
+          this.palSelected = palName;
+          for (const [k, v] of Object.entries(this.palCardStore)) {
+            if (this.isGroupCard(v)) {
+              v.enabled = false;
+            }
+          }
         }
       }
-      if (!this.prioritizeRecreation) {
-        this.palSelected = null;
-      }
-    } else {
-      const entry = this.palCardStore[palName];
-      if (entry && typeof entry === 'object' && entry.group) {
-        entry.enabled = true;
-        this.prioritizeRecreation = true;
-      }
-      this.palSelected = palName;
-    }
     },
+    // Build pal_card_store with explicit type tags for saving/sharing presets
+    buildTaggedPalCardStore() {
+      const out = {};
+      const friendSelected = this.palSelected && this.isFriendCard(this.palCardStore[this.palSelected]);
+      for (const [key, val] of Object.entries(this.palCardStore)) {
+        if (!val) continue;
+        if (this.isGroupCard(val)) {
+          if (val.enabled && !friendSelected) {
+            out[key] = { ...val, type: 'group' };
+          }
+        } else if (this.isFriendCard(val)) {
+          const thresholds = this.getPalThresholds(val);
+          if (thresholds && thresholds.length > 0) {
+            out[key] = { type: 'friend', thresholds: thresholds };
+          }
+        }
+      }
+      return out;
+    },
+
     getFilteredNames() {
         const names = [];
         Object.keys(this.filteredSkillsByType).forEach(type => {
@@ -3008,6 +3079,7 @@ export default {
           'Senior Year': char.objectives.senior_year.dates.map(date => `Senior Year ${date.replace('Senior ', '')}`)
         };
       });
+      this.allTrainingCharacters = this.characterList.map(c => c.name).sort();
     },
     loadRaceData: function () {
       const juniorRaces = raceData.races.filter(race => race.date.includes('Junior Year'));
@@ -3040,20 +3112,25 @@ export default {
         this.hintBoostCharacters.push(name);
       }
     },
-    toggleFsgCharacter(groupIdx, name) {
-      const group = this.friendshipScoreGroups[groupIdx];
-      const idx = group.characters.indexOf(name);
+    toggleFriendshipCharacter(name) {
+      const idx = this.selectedFriendshipCharacters.indexOf(name);
       if (idx >= 0) {
-        group.characters.splice(idx, 1);
+        this.selectedFriendshipCharacters.splice(idx, 1);
       } else {
-        group.characters.push(name);
+        this.selectedFriendshipCharacters.push(name);
+        this.getCharacterConfig(name);
       }
     },
-    filteredFsgCharacters(groupIdx) {
-      const group = this.friendshipScoreGroups[groupIdx];
-      if (!group.search) return this.allTrainingCharacters;
-      const q = group.search.toLowerCase();
-      return this.allTrainingCharacters.filter(n => n.toLowerCase().includes(q));
+    getCharacterConfig(name) {
+      if (!this.characterScoreConfigs[name]) {
+        this.characterScoreConfigs[name] = {
+          expanded: true,
+          junior: { blue: 0.11, green: 0.1, yellow: 0 },
+          classic: { blue: 0.08, green: 0.07, yellow: 0 },
+          senior: { blue: 0, green: 0, yellow: 0 }
+        };
+      }
+      return this.characterScoreConfigs[name];
     },
     deleteBox(item, index) {
       if (this.skillLearnPriorityList.length <= 1) {
@@ -3321,8 +3398,16 @@ export default {
     clearCareerData() {
       this.axios.post('/api/clear-career-data').then(() => {
         alert('past datapoints cleared');
+        this.careerDataCount = 0;
       }).catch(() => {
         alert('failure');
+      });
+    },
+    fetchCareerDataCount() {
+      this.axios.get('/api/career-data-count').then(res => {
+        this.careerDataCount = res.data.count;
+      }).catch(() => {
+        this.careerDataCount = 0;
       });
     },
 
@@ -3459,7 +3544,7 @@ export default {
 
       var learn_skill_blacklist = [...this.blacklistedSkills];
 
-      console.log(learn_skill_list)
+      
       var ura_reset_skill_event_weight_list = this.resetSkillEventWeightList ? this.resetSkillEventWeightList.split(",").map(item => item.trim()) : []
       let payload = {
         app_name: "umamusume",
@@ -3482,7 +3567,8 @@ export default {
           "skip_double_circle_unless_high_hint": this.skipDoubleCircleUnlessHighHint,
           "hint_boost_characters": [...this.hintBoostCharacters],
           "hint_boost_multiplier": this.hintBoostMultiplier,
-          "friendship_score_groups": this.friendshipScoreGroups.map(g => ({ characters: [...g.characters], multiplier: g.multiplier })),
+          "character_score_configs": this.characterScoreConfigs,
+          "selected_friendship_characters": this.selectedFriendshipCharacters,
           "override_insufficient_fans_forced_races": this.overrideInsufficientFansForcedRaces,
           "learn_skill_threshold": this.learnSkillThreshold,
           "allow_recover_tp": this.recoverTP,
@@ -3522,20 +3608,27 @@ export default {
             "preliminaryRoundSelections": [...this.preliminaryRoundSelections],
             "aoharuTeamNameSelection": this.aoharuTeamNameSelection
           } : null,
-          "mant_config": this.selectedScenario === 3 ? {
-            "item_tiers": { ...this.mantItemTiers },
-            "tier_count": this.mantTierCount,
-            "whistle_threshold": this.mantWhistleThreshold,
-            "whistle_focus_summer": this.mantWhistleFocusSummer,
-            "focus_summer_classic": this.mantFocusSummerClassic,
-            "focus_summer_senior": this.mantFocusSummerSenior,
-            "mega_small_threshold": this.mantMegaSmallThreshold,
-            "mega_medium_threshold": this.mantMegaMediumThreshold,
-            "mega_large_threshold": this.mantMegaLargeThreshold,
-            "mega_race_penalty": this.mantMegaRacePenalty,
-            "mega_summer_bonus": this.mantMegaSummerBonus,
-            "training_weights_threshold": this.mantTrainingWeightsThreshold,
-            "bbq_unmaxxed_cards": this.mantBbqUnmaxxedCards,
+          "facility_ratios": [...this.facilityRatios],
+          "facility_period_configs": this.facilityPeriodConfigs.map(p => ({
+            enabled: p.enabled,
+            base: p.base,
+            scale: p.scale,
+            ratios: [...p.ratios]
+          })),
+           "mant_config": this.selectedScenario === 3 ? {
+             "item_tiers": { ...this.mantItemTiers },
+             "tier_count": this.mantTierCount,
+             "whistle_threshold": this.mantWhistleThreshold,
+             "whistle_focus_summer": this.mantWhistleFocusSummer,
+             "focus_summer_classic": this.mantFocusSummerClassic,
+             "focus_summer_senior": this.mantFocusSummerSenior,
+             "mega_small_threshold": this.mantMegaSmallThreshold,
+             "mega_medium_threshold": this.mantMegaMediumThreshold,
+             "mega_large_threshold": this.mantMegaLargeThreshold,
+             "mega_race_penalty": this.mantMegaRacePenalty,
+             "mega_summer_bonus": this.mantMegaSummerBonus,
+             "training_weights_threshold": this.mantTrainingWeightsThreshold,
+             "bbq_unmaxxed_cards": this.mantBbqUnmaxxedCards,
             "charm_threshold": this.mantCharmThreshold,
             "charm_failure_rate": this.mantCharmFailureRate,
             "skip_race_percentile": this.mantSkipRacePercentile,
@@ -3548,7 +3641,7 @@ export default {
           cron: this.cron
         }
       }
-      console.log('POST /task', payload)
+      
       payload.attachment_data = payload.attachment_data || {};
       payload.attachment_data.event_choices = this.buildEventChoices();
       
@@ -3585,13 +3678,14 @@ export default {
         }
       };
 
-      const palThresholds = this.palCardStore[this.palSelected];
-      const tsData = this.palCardStore['team_sirius'];
-      const tsEnabled = tsData && typeof tsData === 'object' && tsData.group === 'team_sirius' && tsData.enabled;
-      if ((this.prioritizeRecreation && this.palSelected && Array.isArray(palThresholds) && palThresholds.length > 0) || tsEnabled) {
+      const selectedPalEntry = this.palSelected ? this.palCardStore[this.palSelected] : null;
+      const palThresholds = this.getPalThresholds(selectedPalEntry);
+      const hasFriendCard = this.prioritizeRecreation && this.palSelected && palThresholds && palThresholds.length > 0;
+
+      if (hasFriendCard) {
         payload.attachment_data.prioritize_recreation = true;
         payload.attachment_data.pal_name = this.palSelected || "";
-        payload.attachment_data.pal_thresholds = Array.isArray(palThresholds) ? palThresholds : [];
+        payload.attachment_data.pal_thresholds = palThresholds;
         payload.attachment_data.pal_friendship_score = [...this.palFriendshipScore];
         payload.attachment_data.pal_card_multiplier = this.palCardMultiplier;
       } else {
@@ -3601,7 +3695,25 @@ export default {
         payload.attachment_data.pal_friendship_score = [0.08, 0.057, 0.018];
         payload.attachment_data.pal_card_multiplier = 0.1;
       }
-      payload.attachment_data.pal_card_store = Object.fromEntries(Object.entries(this.palCardStore).filter(([k, v]) => (Array.isArray(v) && v.length > 0) || (typeof v === 'object' && v !== null && v.group)));
+
+      
+      
+      const palCardStoreOut = {};
+      const friendSelected = this.palSelected && this.isFriendCard(this.palCardStore[this.palSelected]);
+      for (const [key, val] of Object.entries(this.palCardStore)) {
+        if (!val) continue;
+        if (this.isGroupCard(val)) {
+          if (val.enabled && !friendSelected) {
+            palCardStoreOut[key] = { ...val, type: 'group' };
+          }
+        } else if (this.isFriendCard(val)) {
+          const thresholds = this.getPalThresholds(val);
+          if (thresholds && thresholds.length > 0) {
+            palCardStoreOut[key] = { type: 'friend', thresholds: thresholds };
+          }
+        }
+      }
+      payload.attachment_data.pal_card_store = palCardStoreOut;
       payload.attachment_data.npc_score_value = [
         [...this.npcScoreJunior],
         [...this.npcScoreClassic],
@@ -3615,12 +3727,17 @@ export default {
           $('#create-task-list-modal').modal('hide');
         }
       ).catch(e => {
-        console.error(e)
+        
       })
     },
     applyPresetRace: function () {
       this.selectedScenario = this.presetsUse.scenario || 1
-      this.extraRace = this.presetsUse.race_list
+      const presetRaceList = Array.isArray(this.presetsUse.race_list)
+        ? this.presetsUse.race_list
+        : (Array.isArray(this.presetsUse.extra_race_list) ? this.presetsUse.extra_race_list : [])
+      this.extraRace = presetRaceList
+        .map(raceId => Number(raceId))
+        .filter(raceId => Number.isFinite(raceId))
       this.expectSpeedValue = this.presetsUse.expect_attribute[0]
       this.expectStaminaValue = this.presetsUse.expect_attribute[1]
       this.expectPowerValue = this.presetsUse.expect_attribute[2]
@@ -3641,11 +3758,13 @@ export default {
       this.skipDoubleCircleUnlessHighHint = !!this.presetsUse.skip_double_circle_unless_high_hint
       this.hintBoostCharacters = Array.isArray(this.presetsUse.hint_boost_characters) ? [...this.presetsUse.hint_boost_characters] : []
       this.hintBoostMultiplier = this.presetsUse.hint_boost_multiplier !== undefined ? this.presetsUse.hint_boost_multiplier : 100
-      if (Array.isArray(this.presetsUse.friendship_score_groups) && this.presetsUse.friendship_score_groups.length > 0) {
-        this.friendshipScoreGroups = this.presetsUse.friendship_score_groups.map(g => ({ characters: [...(g.characters || [])], multiplier: g.multiplier !== undefined ? g.multiplier : 100, search: '', expanded: false }))
-      } else {
-        this.friendshipScoreGroups = [{ characters: [], multiplier: 100, search: '', expanded: false }, { characters: [], multiplier: 100, search: '', expanded: false }]
-      }
+      this.selectedFriendshipCharacters = Array.isArray(this.presetsUse.selected_friendship_characters) ? [...this.presetsUse.selected_friendship_characters] : [];
+      this.characterScoreConfigs = this.presetsUse.character_score_configs || {};
+      this.selectedFriendshipCharacters.forEach(name => {
+        if (!this.characterScoreConfigs[name]) {
+          this.characterScoreConfigs[name] = this.getCharacterConfig(name);
+        }
+      });
         this.learnSkillThreshold = this.presetsUse.learn_skill_threshold
         if (this.presetsUse.tactic_actions && this.presetsUse.tactic_actions.length > 0) {
           this.raceTacticConditions = this.presetsUse.tactic_actions;
@@ -3672,13 +3791,29 @@ export default {
         const presetStore = this.presetsUse.pal_card_store
         for (const key in presetStore) {
           const val = presetStore[key]
-          if ((Array.isArray(val) && val.length > 0) || (typeof val === 'object' && val !== null && val.group)) {
-            this.palCardStore[key] = val
+          
+          const normalized = this.normalizePalEntry(key, val);
+          if (normalized) {
+            this.palCardStore[key] = normalized;
           }
         }
       }
+      // Ensure team_sirius group card exists even if preset didn't have one
       if (!this.palCardStore['team_sirius']) {
-        this.palCardStore['team_sirius'] = { group: 'team_sirius', enabled: false, percentile: 26 }
+        this.palCardStore['team_sirius'] = { type: 'group', group: 'team_sirius', enabled: false, percentile: 26 };
+      }
+
+      // Sync: if a friend card is selected, group cards must be disabled
+      if (this.palSelected && this.isFriendCard(this.palCardStore[this.palSelected])) {
+        for (const v of Object.values(this.palCardStore)) {
+          if (this.isGroupCard(v)) {
+            v.enabled = false;
+          }
+        }
+      }
+      // If a group card is selected, friend card must not claim prioritize_recreation
+      if (this.palSelected && this.isGroupCard(this.palCardStore[this.palSelected])) {
+        this.prioritizeRecreation = false;
       }
 
       if ('pal_friendship_score' in this.presetsUse && Array.isArray(this.presetsUse.pal_friendship_score)) {
@@ -3955,36 +4090,36 @@ export default {
         this.mantWhistleFocusSummer = this.presetsUse.mant_config.whistle_focus_summer ?? true;
         this.mantFocusSummerClassic = this.presetsUse.mant_config.focus_summer_classic ?? 20;
         this.mantFocusSummerSenior = this.presetsUse.mant_config.focus_summer_senior ?? 10;
-        this.mantMegaSmallThreshold = this.presetsUse.mant_config.mega_small_threshold ?? 37;
-        this.mantMegaMediumThreshold = this.presetsUse.mant_config.mega_medium_threshold ?? 42;
-        this.mantMegaLargeThreshold = this.presetsUse.mant_config.mega_large_threshold ?? 47;
-        this.mantMegaRacePenalty = this.presetsUse.mant_config.mega_race_penalty ?? 5;
-        this.mantMegaSummerBonus = this.presetsUse.mant_config.mega_summer_bonus ?? 10;
-        this.mantTrainingWeightsThreshold = this.presetsUse.mant_config.training_weights_threshold ?? 40;
         this.mantBbqUnmaxxedCards = this.presetsUse.mant_config.bbq_unmaxxed_cards ?? 3;
         this.mantCharmThreshold = this.presetsUse.mant_config.charm_threshold ?? 40;
         this.mantCharmFailureRate = this.presetsUse.mant_config.charm_failure_rate ?? 21;
-        this.mantSkipRacePercentile = this.presetsUse.mant_config.skip_race_percentile ?? 0;
-        this.mantTierThresholds = this.presetsUse.mant_config.tier_thresholds ?? {"3":51,"7":300,"8":99999999999};
-      } else {
-        this.mantItemTiers = this.mantGetDefaultTiers();
-        this.mantTierCount = 8;
-        this.mantTierThresholds = {"3":51,"7":300,"8":99999999999};
-        this.mantWhistleThreshold = 20;
-        this.mantWhistleFocusSummer = true;
-        this.mantFocusSummerClassic = 20;
-        this.mantFocusSummerSenior = 10;
-        this.mantMegaSmallThreshold = 37;
-        this.mantMegaMediumThreshold = 42;
-        this.mantMegaLargeThreshold = 47;
-        this.mantMegaRacePenalty = 5;
-        this.mantMegaSummerBonus = 10;
-        this.mantTrainingWeightsThreshold = 40;
-        this.mantBbqUnmaxxedCards = 3;
-        this.mantCharmThreshold = 40;
-        this.mantCharmFailureRate = 21;
-        this.mantSkipRacePercentile = 0;
-      }
+         this.mantSkipRacePercentile = this.presetsUse.mant_config.skip_race_percentile ?? 0;
+         this.mantTierThresholds = this.presetsUse.mant_config.tier_thresholds ?? {"3":51,"7":300,"8":99999999999};
+         this.mantMegaSmallThreshold = this.presetsUse.mant_config.mega_small_threshold ?? 60;
+         this.mantMegaMediumThreshold = this.presetsUse.mant_config.mega_medium_threshold ?? 70;
+         this.mantMegaLargeThreshold = this.presetsUse.mant_config.mega_large_threshold ?? 80;
+         this.mantMegaRacePenalty = this.presetsUse.mant_config.mega_race_penalty ?? 5;
+         this.mantMegaSummerBonus = this.presetsUse.mant_config.mega_summer_bonus ?? 10;
+         this.mantTrainingWeightsThreshold = this.presetsUse.mant_config.training_weights_threshold ?? 60;
+       } else {
+         this.mantItemTiers = this.mantGetDefaultTiers();
+         this.mantTierCount = 8;
+         this.mantTierThresholds = {"3":51,"7":300,"8":99999999999};
+         this.mantWhistleThreshold = 20;
+         this.mantWhistleFocusSummer = true;
+         this.mantFocusSummerClassic = 20;
+         this.mantFocusSummerSenior = 10;
+         this.mantMegaSmallThreshold = 60;
+         this.mantMegaMediumThreshold = 70;
+         this.mantMegaLargeThreshold = 80;
+         this.mantMegaRacePenalty = 5;
+         this.mantMegaSummerBonus = 10;
+         this.mantTrainingWeightsThreshold = 60;
+         this.mantBbqUnmaxxedCards = 3;
+         this.mantCharmThreshold = 40;
+         this.mantCharmFailureRate = 21;
+         this.mantSkipRacePercentile = 0;
+       }
 
     },
     showModal: function () {
@@ -4023,11 +4158,32 @@ export default {
       this.skipDoubleCircleUnlessHighHint = data.skip_double_circle_unless_high_hint || false;
       this.hintBoostCharacters = Array.isArray(data.hint_boost_characters) ? [...data.hint_boost_characters] : [];
       this.hintBoostMultiplier = data.hint_boost_multiplier !== undefined ? data.hint_boost_multiplier : 100;
-      if (Array.isArray(data.friendship_score_groups) && data.friendship_score_groups.length > 0) {
-        this.friendshipScoreGroups = data.friendship_score_groups.map(g => ({ characters: [...(g.characters || [])], multiplier: g.multiplier !== undefined ? g.multiplier : 100, search: '', expanded: false }));
+      
+      if (data.character_score_configs && typeof data.character_score_configs === 'object') {
+        this.characterScoreConfigs = {};
+        this.selectedFriendshipCharacters = [];
+        for (const charName in data.character_score_configs) {
+          this.selectedFriendshipCharacters.push(charName);
+          const charData = data.character_score_configs[charName];
+          this.characterScoreConfigs[charName] = {
+            expanded: false,
+            junior: { blue: 0, green: 0, yellow: 0, ...(charData.junior || {}) },
+            classic: { blue: 0, green: 0, yellow: 0, ...(charData.classic || {}) },
+            senior: { blue: 0, green: 0, yellow: 0, ...(charData.senior || {}) }
+          };
+        }
       } else {
-        this.friendshipScoreGroups = [{ characters: [], multiplier: 100, search: '', expanded: false }, { characters: [], multiplier: 100, search: '', expanded: false }];
+        this.characterScoreConfigs = {};
+        this.selectedFriendshipCharacters = [];
       }
+
+      this.selectedFriendshipCharacters = Array.isArray(data.selected_friendship_characters) ? [...data.selected_friendship_characters] : [];
+      this.characterScoreConfigs = data.character_score_configs || {};
+      this.selectedFriendshipCharacters.forEach(name => {
+        if (!this.characterScoreConfigs[name]) {
+          this.characterScoreConfigs[name] = this.getCharacterConfig(name);
+        }
+      });
       this.learnSkillOnlyUserProvided = data.learn_skill_only_user_provided || false;
       if (data.tactic_list && data.tactic_list.length >= 3) {
         this.selectedRaceTactic1 = data.tactic_list[0];
@@ -4040,20 +4196,23 @@ export default {
       this.prioritizeRecreation = data.prioritize_recreation || false;
       if (data.pal_name) this.palSelected = data.pal_name;
       if (data.pal_thresholds && this.palSelected) {
-        this.palCardStore[this.palSelected] = data.pal_thresholds;
+        this.palCardStore[this.palSelected] = this.normalizePalEntry(this.palSelected, data.pal_thresholds);
       }
       if (data.pal_card_store && typeof data.pal_card_store === 'object') {
         for (const key in data.pal_card_store) {
           const val = data.pal_card_store[key];
-          if ((Array.isArray(val) && val.length > 0) || (typeof val === 'object' && val !== null && val.group)) {
-            this.palCardStore[key] = val;
+          const normalized = this.normalizePalEntry(key, val);
+          if (normalized) {
+            this.palCardStore[key] = normalized;
           }
         }
       }
       if (!this.palCardStore['team_sirius']) {
-        this.palCardStore['team_sirius'] = { group: 'team_sirius', enabled: false, percentile: 26 };
+        this.palCardStore['team_sirius'] = { type: 'group', group: 'team_sirius', enabled: false, percentile: 26 };
       }
-      if (this.palCardStore['team_sirius']?.enabled) {
+      // Set prioritize_recreation based on friend card selection (NOT group card — they're independent)
+      const selectedEntry = this.palSelected ? this.palCardStore[this.palSelected] : null;
+      if (selectedEntry && this.isFriendCard(selectedEntry) && this.getPalThresholds(selectedEntry)) {
         this.prioritizeRecreation = true;
       }
       if (!this.palSelected) {
@@ -4170,35 +4329,77 @@ export default {
         this.mantWhistleFocusSummer = data.mant_config.whistle_focus_summer ?? true;
         this.mantFocusSummerClassic = data.mant_config.focus_summer_classic ?? 20;
         this.mantFocusSummerSenior = data.mant_config.focus_summer_senior ?? 10;
-        this.mantMegaSmallThreshold = data.mant_config.mega_small_threshold ?? 37;
-        this.mantMegaMediumThreshold = data.mant_config.mega_medium_threshold ?? 42;
-        this.mantMegaLargeThreshold = data.mant_config.mega_large_threshold ?? 47;
-        this.mantMegaRacePenalty = data.mant_config.mega_race_penalty ?? 5;
-        this.mantMegaSummerBonus = data.mant_config.mega_summer_bonus ?? 10;
-        this.mantTrainingWeightsThreshold = data.mant_config.training_weights_threshold ?? 40;
         this.mantBbqUnmaxxedCards = data.mant_config.bbq_unmaxxed_cards ?? 3;
         this.mantCharmThreshold = data.mant_config.charm_threshold ?? 40;
         this.mantCharmFailureRate = data.mant_config.charm_failure_rate ?? 21;
-        this.mantSkipRacePercentile = data.mant_config.skip_race_percentile ?? 0;
-        this.mantTierThresholds = data.mant_config.tier_thresholds ?? {"3":51,"7":300,"8":99999999999};
-      } else {
+         this.mantSkipRacePercentile = data.mant_config.skip_race_percentile ?? 0;
+         this.mantTierThresholds = data.mant_config.tier_thresholds ?? {"3":51,"7":300,"8":99999999999};
+         this.mantMegaSmallThreshold = data.mant_config.mega_small_threshold ?? 60;
+         this.mantMegaMediumThreshold = data.mant_config.mega_medium_threshold ?? 70;
+         this.mantMegaLargeThreshold = data.mant_config.mega_large_threshold ?? 80;
+         this.mantMegaRacePenalty = data.mant_config.mega_race_penalty ?? 5;
+         this.mantMegaSummerBonus = data.mant_config.mega_summer_bonus ?? 10;
+         this.mantTrainingWeightsThreshold = data.mant_config.training_weights_threshold ?? 60;
+       } else {
         this.mantItemTiers = this.mantGetDefaultTiers();
         this.mantTierCount = 8;
         this.mantTierThresholds = {"3":51,"7":300,"8":99999999999};
         this.mantWhistleThreshold = 20;
         this.mantWhistleFocusSummer = true;
-        this.mantFocusSummerClassic = 20;
-        this.mantFocusSummerSenior = 10;
-        this.mantMegaSmallThreshold = 37;
-        this.mantMegaMediumThreshold = 42;
-        this.mantMegaLargeThreshold = 47;
-        this.mantMegaRacePenalty = 5;
-        this.mantMegaSummerBonus = 10;
-        this.mantTrainingWeightsThreshold = 40;
-        this.mantBbqUnmaxxedCards = 3;
+         this.mantFocusSummerClassic = 20;
+         this.mantFocusSummerSenior = 10;
+         this.mantMegaSmallThreshold = 60;
+         this.mantMegaMediumThreshold = 70;
+         this.mantMegaLargeThreshold = 80;
+         this.mantMegaRacePenalty = 5;
+         this.mantMegaSummerBonus = 10;
+         this.mantTrainingWeightsThreshold = 60;
+         this.mantBbqUnmaxxedCards = 3;
         this.mantCharmThreshold = 40;
         this.mantCharmFailureRate = 21;
         this.mantSkipRacePercentile = 0;
+      }
+
+      if (data.facility_period_configs) {
+        this.facilityPeriodConfigs.forEach((p, i) => {
+          if (data.facility_period_configs[i]) {
+            p.enabled = data.facility_period_configs[i].enabled || false;
+            p.base = data.facility_period_configs[i].base || 0.0;
+            p.scale = data.facility_period_configs[i].scale || 0.0;
+            if (data.facility_period_configs[i].ratios) {
+              p.ratios = [...data.facility_period_configs[i].ratios];
+            }
+          }
+        });
+      } else if (data.attachment_data && data.attachment_data.facility_period_configs) {
+         this.facilityPeriodConfigs.forEach((p, i) => {
+          if (data.attachment_data.facility_period_configs[i]) {
+            p.enabled = data.attachment_data.facility_period_configs[i].enabled || false;
+            p.base = data.attachment_data.facility_period_configs[i].base || 0.0;
+            p.scale = data.attachment_data.facility_period_configs[i].scale || 0.0;
+            if (data.attachment_data.facility_period_configs[i].ratios) {
+              p.ratios = [...data.attachment_data.facility_period_configs[i].ratios];
+            }
+          }
+        });
+      }
+
+      if ('character_score_configs' in this.presetsUse && typeof this.presetsUse.character_score_configs === 'object') {
+        this.characterScoreConfigs = {};
+        this.selectedFriendshipCharacters = [];
+        for (const charName in this.presetsUse.character_score_configs) {
+          this.selectedFriendshipCharacters.push(charName);
+          const charData = this.presetsUse.character_score_configs[charName];
+          this.characterScoreConfigs[charName] = {
+            expanded: false,
+            junior: { blue: 0, green: 0, yellow: 0, friendship: 0, ...(charData.junior || {}) },
+            classic: { blue: 0, green: 0, yellow: 0, friendship: 0, ...(charData.classic || {}) },
+            senior: { blue: 0, green: 0, yellow: 0, friendship: 0, ...(charData.senior || {}) }
+          };
+        }
+      } else {
+        this.characterScoreConfigs = {};
+        this.selectedFriendshipCharacters = [];
       }
     },
     getPresets: function () {
@@ -4236,7 +4437,8 @@ export default {
         use_last_parents: this.useLastParents,
         override_insufficient_fans_forced_races: this.overrideInsufficientFansForcedRaces,
         scenario: this.selectedScenario,
-        race_list: this.extraRace,
+        race_list: this.extraRace.map(raceId => Number(raceId)).filter(raceId => Number.isFinite(raceId)),
+        extra_race_list: this.extraRace.map(raceId => Number(raceId)).filter(raceId => Number.isFinite(raceId)),
         skill_priority_list: skill_priority_list,
         skill_blacklist: skill_blacklist,
         event_weights: {
@@ -4286,7 +4488,8 @@ export default {
         skip_double_circle_unless_high_hint: this.skipDoubleCircleUnlessHighHint,
         hint_boost_characters: [...this.hintBoostCharacters],
         hint_boost_multiplier: this.hintBoostMultiplier,
-        friendship_score_groups: this.friendshipScoreGroups.map(g => ({ characters: [...g.characters], multiplier: g.multiplier })),
+        character_score_configs: this.characterScoreConfigs,
+        selected_friendship_characters: [...this.selectedFriendshipCharacters],
         race_tactic_1: this.selectedRaceTactic1,
         race_tactic_2: this.selectedRaceTactic2,
         race_tactic_3: this.selectedRaceTactic3,
@@ -4327,7 +4530,7 @@ export default {
         prioritize_recreation: this.prioritizeRecreation,
 
         pal_selected: this.palSelected,
-        pal_card_store: Object.fromEntries(Object.entries(this.palCardStore).filter(([k, v]) => (Array.isArray(v) && v.length > 0) || (typeof v === 'object' && v !== null && v.group))),
+        pal_card_store: this.buildTaggedPalCardStore(),
 
         pal_friendship_score: [...this.palFriendshipScore],
         pal_card_multiplier: this.palCardMultiplier,
@@ -4343,7 +4546,7 @@ export default {
         blacklistedSkills: [...this.blacklistedSkills],
         skillAssignments: { ...this.skillAssignments },
         activePriorities: [...this.activePriorities]
-      }
+      };
       preset.skillEventWeight = [...this.skillEventWeight];
       preset.resetSkillEventWeightList = this.resetSkillEventWeightList;
       if (this.selectedScenario === 2) {
@@ -4352,30 +4555,36 @@ export default {
           aoharuTeamNameSelection: this.aoharuTeamNameSelection
         };
       } else if (this.selectedScenario === 3) {
-        preset.mant_config = {
-          item_tiers: { ...this.mantItemTiers },
-          tier_count: this.mantTierCount,
-          whistle_threshold: this.mantWhistleThreshold,
-          whistle_focus_summer: this.mantWhistleFocusSummer,
-          focus_summer_classic: this.mantFocusSummerClassic,
-          focus_summer_senior: this.mantFocusSummerSenior,
-          mega_small_threshold: this.mantMegaSmallThreshold,
-          mega_medium_threshold: this.mantMegaMediumThreshold,
-          mega_large_threshold: this.mantMegaLargeThreshold,
-          mega_race_penalty: this.mantMegaRacePenalty,
-          mega_summer_bonus: this.mantMegaSummerBonus,
-          training_weights_threshold: this.mantTrainingWeightsThreshold,
-          bbq_unmaxxed_cards: this.mantBbqUnmaxxedCards,
-          charm_threshold: this.mantCharmThreshold,
-          charm_failure_rate: this.mantCharmFailureRate,
-          skip_race_percentile: this.mantSkipRacePercentile,
-          tier_thresholds: { ...this.mantTierThresholds }
-        };
+         preset.mant_config = {
+           item_tiers: { ...this.mantItemTiers },
+           tier_count: this.mantTierCount,
+           whistle_threshold: this.mantWhistleThreshold,
+           whistle_focus_summer: this.mantWhistleFocusSummer,
+           focus_summer_classic: this.mantFocusSummerClassic,
+           focus_summer_senior: this.mantFocusSummerSenior,
+           mega_small_threshold: this.mantMegaSmallThreshold,
+           mega_medium_threshold: this.mantMegaMediumThreshold,
+           mega_large_threshold: this.mantMegaLargeThreshold,
+           mega_race_penalty: this.mantMegaRacePenalty,
+           mega_summer_bonus: this.mantMegaSummerBonus,
+           training_weights_threshold: this.mantTrainingWeightsThreshold,
+           bbq_unmaxxed_cards: this.mantBbqUnmaxxedCards,
+           charm_threshold: this.mantCharmThreshold,
+           charm_failure_rate: this.mantCharmFailureRate,
+           skip_race_percentile: this.mantSkipRacePercentile,
+           tier_thresholds: { ...this.mantTierThresholds }
+         };
       }
+      preset.facility_period_configs = this.facilityPeriodConfigs.map(p => ({
+        enabled: p.enabled,
+        base: p.base,
+        scale: p.scale,
+        ratios: [...p.ratios]
+      }));
       let payload = {
         "preset": JSON.stringify(preset)
       }
-      console.log(JSON.stringify(payload))
+      
       const savedName = this.presetNameEdit
       this.axios.post("/umamusume/add-presets", JSON.stringify(payload)).then(
         () => {
@@ -4452,7 +4661,8 @@ export default {
         use_last_parents: this.useLastParents,
         override_insufficient_fans_forced_races: this.overrideInsufficientFansForcedRaces,
         scenario: this.selectedScenario,
-        race_list: this.extraRace,
+        race_list: this.extraRace.map(raceId => Number(raceId)).filter(raceId => Number.isFinite(raceId)),
+        extra_race_list: this.extraRace.map(raceId => Number(raceId)).filter(raceId => Number.isFinite(raceId)),
         skill_priority_list: skill_priority_list,
         skill_blacklist: skill_blacklist,
         event_weights: {
@@ -4475,7 +4685,8 @@ export default {
         skip_double_circle_unless_high_hint: this.skipDoubleCircleUnlessHighHint,
         hint_boost_characters: [...this.hintBoostCharacters],
         hint_boost_multiplier: this.hintBoostMultiplier,
-        friendship_score_groups: this.friendshipScoreGroups.map(g => ({ characters: [...g.characters], multiplier: g.multiplier })),
+        character_score_configs: this.characterScoreConfigs,
+        selected_friendship_characters: [...this.selectedFriendshipCharacters],
         race_tactic_1: this.selectedRaceTactic1,
         race_tactic_2: this.selectedRaceTactic2,
         race_tactic_3: this.selectedRaceTactic3,
@@ -4492,7 +4703,7 @@ export default {
         motivation_threshold_year3: this.motivationThresholdYear3,
         prioritize_recreation: this.prioritizeRecreation,
         pal_selected: this.palSelected,
-        pal_card_store: Object.fromEntries(Object.entries(this.palCardStore).filter(([k, v]) => (Array.isArray(v) && v.length > 0) || (typeof v === 'object' && v !== null && v.group))),
+        pal_card_store: this.buildTaggedPalCardStore(),
         pal_friendship_score: [...this.palFriendshipScore],
         pal_card_multiplier: this.palCardMultiplier,
         npc_score_value: [[...this.npcScoreJunior], [...this.npcScoreClassic], [...this.npcScoreSenior], [...this.npcScoreSeniorAfterSummer], [...this.npcScoreFinale]],
@@ -4643,7 +4854,37 @@ export default {
     this.destroyScrollSpy();
   },
   watch: {
-
+    presetsUse() {
+      this.applyPresetRace();
+    },
+    selectedScenario(newVal) {
+      this.normalizeScoreArrays(newVal === 2 ? 5 : 4);
+    },
+    scoreValueJunior(val) {
+      if (this.selectedScenario === 2 && Array.isArray(val) && val.length < 5) {
+        this.scoreValueJunior = [...val, ...Array(5 - val.length).fill(0.15)];
+      }
+    },
+    scoreValueClassic(val) {
+      if (this.selectedScenario === 2 && Array.isArray(val) && val.length < 5) {
+        this.scoreValueClassic = [...val, ...Array(5 - val.length).fill(0.12)];
+      }
+    },
+    scoreValueSenior(val) {
+      if (this.selectedScenario === 2 && Array.isArray(val) && val.length < 5) {
+        this.scoreValueSenior = [...val, ...Array(5 - val.length).fill(0.09)];
+      }
+    },
+    scoreValueSeniorAfterSummer(val) {
+      if (this.selectedScenario === 2 && Array.isArray(val) && val.length < 5) {
+        this.scoreValueSeniorAfterSummer = [...val, ...Array(5 - val.length).fill(0.07)];
+      }
+    },
+    scoreValueFinale(val) {
+      if (this.selectedScenario === 2 && Array.isArray(val) && val.length < 5) {
+        this.scoreValueFinale = [...val, ...Array(5 - val.length).fill(0)];
+      }
+    }
   }
 }
 </script>
@@ -4706,8 +4947,8 @@ export default {
   position: sticky;
   top: 16px;
   height: fit-content;
-  background: #ffffff;
-  border: 1px solid #e5e7eb;
+  background: var(--surface);
+  border: 1px solid var(--accent);
   border-radius: 12px;
   padding: 12px;
 }
@@ -4715,6 +4956,7 @@ export default {
 .side-nav-title {
   font-weight: 700;
   margin-bottom: 8px;
+  color: var(--muted);
 }
 
 .side-nav-list {
@@ -4726,18 +4968,18 @@ export default {
 .side-nav-list li a {
   display: block;
   padding: 8px 10px;
-  color: #374151;
+  color: var(--text);
   border-radius: 8px;
   text-decoration: none;
 }
 
 .side-nav-list li a:hover {
-  background: #f3f4f6;
+  background: color-mix(in srgb, var(--accent) 15%, transparent);
 }
 
 .side-nav-list li a.active {
-  background: #eef2ff;
-  color: #4338ca;
+  background: color-mix(in srgb, var(--accent) 25%, transparent);
+  color: var(--accent);
   font-weight: 600;
 }
 
@@ -6321,6 +6563,16 @@ export default {
 
 .event-weights-table td strong {
   color: var(--accent);
+}
+
+.facility-ratios-section .form-control,
+.facility-period-table .form-control {
+  background: rgba(255, 255, 255, 0.05) !important;
+  border-color: rgba(255, 255, 255, 0.12) !important;
+}
+
+.facility-period-table thead th:after {
+  display: none !important;
 }
 
 .event-weights-table input.form-control {

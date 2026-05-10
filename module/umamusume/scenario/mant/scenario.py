@@ -1,11 +1,7 @@
-import cv2
-
 from module.umamusume.scenario.ura_scenario import URAScenario
 from module.umamusume.scenario.registry import register
 from module.umamusume.asset import *
-from module.umamusume.define import ScenarioType, SupportCardFavorLevel, SupportCardType
-from module.umamusume.types import SupportCardInfo
-from bot.recog.image_matcher import image_match, compare_color_equal
+from module.umamusume.define import ScenarioType
 from bot.recog.training_stat_scanner import parse_training_result_template
 from .handlers import get_mant_ui_handlers
 from .hooks import mant_after_hook
@@ -23,8 +19,6 @@ STAT_AREAS_MANT = {
     "wits": (470, 770, 580, 826),
     "sp": (588, 770, 695, 826),
 }
-
-MAX_ENERGY = 100
 
 def get_incoming_energy(current_turn, lookahead=1):
     total = 0
@@ -85,8 +79,9 @@ class MANTScenario(URAScenario):
         except Exception:
             w_energy_change = 0.006
 
-        overflow_without = max(0, current_energy + incoming - MAX_ENERGY)
-        overflow_with = max(0, (current_energy + energy_change_val) + incoming - MAX_ENERGY)
+        max_energy = getattr(ctx.cultivate_detail, 'mant_max_energy', 100)
+        overflow_without = max(0, current_energy + incoming - max_energy)
+        overflow_with = max(0, (current_energy + energy_change_val) + incoming - max_energy)
         wasted_diff = overflow_with - overflow_without
 
         if wasted_diff != 0:
@@ -95,3 +90,33 @@ class MANTScenario(URAScenario):
             formula_parts.append(f"nrg_event(+{incoming},overflow:{wasted_diff:+.0f}):{penalty:+.3f}")
 
         return (additive, multiplier, formula_parts, mult_parts)
+
+    def compute_energy_penalty_for_race_chain(self, ctx, current_energy, rest_threshold, date):
+        if current_energy is None:
+            return 1.0
+        
+        race_count = 0
+        from module.umamusume.asset.race_data import get_races_for_period
+        for offset in range(1, 5):
+            future_date = date + offset
+            available = get_races_for_period(future_date)
+            if any(r in ctx.cultivate_detail.extra_race_list for r in available):
+                race_count += 1
+        
+        if race_count < 2:
+            return 1.0
+        
+        avg_energy_change = 0.0
+        for ti in ctx.cultivate_detail.turn_info.training_info_list:
+            avg_energy_change += getattr(ti, 'energy_change', 0.0)
+        avg_energy_change /= 5.0
+        
+        wit_training_count = max(1, race_count // 3)
+        wit_gain = wit_training_count * 20.0
+        projected = current_energy - (race_count * 20) + wit_gain + avg_energy_change * race_count
+        
+        if projected < 10:
+            return 0.0
+        elif projected < rest_threshold:
+            return 0.5
+        return 1.0

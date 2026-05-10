@@ -5,7 +5,7 @@ import vue from '@vitejs/plugin-vue'
 import fs from 'node:fs'
 import path from 'node:path'
 
-// https://vitejs.dev/config/
+// vite config
 export default defineConfig({
   base: "./",
   plugins: [
@@ -24,7 +24,7 @@ export default defineConfig({
             const data = JSON.parse(raw || '{}');
             const names = Array.isArray(data) ? data : Object.keys(data || {}).sort();
 
-            // Build a map of event -> option count (buttons to render)
+
             let counts = {};
             if (!Array.isArray(data) && data && typeof data === 'object') {
               for (const [name, value] of Object.entries(data)) {
@@ -49,6 +49,24 @@ export default defineConfig({
           }
         }
       }
+    },
+    {
+      name: 'restore-races',
+      apply: 'build',
+      closeBundle() {
+        const publicDir = path.join(__dirname, '..', 'public');
+        const racesBackupDir = path.join(__dirname, '..', 'backup_races');
+        const publicRacesDir = path.join(publicDir, 'races');
+
+        if (fs.existsSync(racesBackupDir)) {
+          try {
+            fs.rmSync(publicRacesDir, { recursive: true, force: true });
+          } catch (e) {
+            console.warn(`Failed to remove ${publicRacesDir}: ${e.message}`);
+          }
+          copyFolderRecursive(racesBackupDir, publicRacesDir);
+        }
+      }
     }
   ],
   resolve: {
@@ -62,3 +80,18 @@ export default defineConfig({
     emptyOutDir: true
   }
 })
+
+function copyFolderRecursive(src, dest) {
+  if (!fs.existsSync(src)) return;
+  fs.mkdirSync(dest, { recursive: true });
+  const entries = fs.readdirSync(src, { withFileTypes: true });
+  for (const entry of entries) {
+    const srcPath = path.join(src, entry.name);
+    const destPath = path.join(dest, entry.name);
+    if (entry.isDirectory()) {
+      copyFolderRecursive(srcPath, destPath);
+    } else {
+      fs.copyFileSync(srcPath, destPath);
+    }
+  }
+}

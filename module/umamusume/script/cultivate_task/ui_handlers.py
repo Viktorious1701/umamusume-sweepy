@@ -7,7 +7,7 @@ from bot.recog.image_matcher import image_match
 from module.umamusume.context import UmamusumeContext, clear_detected_skills
 from module.umamusume.define import ScenarioType
 from module.umamusume.asset.point import (
-    TO_CULTIVATE_SCENARIO_CHOOSE, TO_CULTIVATE_PREPARE_NEXT,
+    TO_CULTIVATE_SCENARIO_CHOOSE, TO_CULTIVATE_PREPARE_NEXT, TO_CULTIVATE_PREPARE_NEXT_RIGHT,
     TO_CULTIVATE_PREPARE_AUTO_SELECT, TO_CULTIVATE_PREPARE_INCLUDE_GUEST,
     TO_CULTIVATE_PREPARE_CONFIRM, TO_FOLLOW_SUPPORT_CARD_SELECT,
     CULTIVATE_FINAL_CHECK_START, CULTIVATE_RESULT_CONFIRM,
@@ -18,7 +18,9 @@ from module.umamusume.asset.point import (
     GOAL_ACHIEVE_CONFIRM, GOAL_FAIL_CONFIRM, NEXT_GOAL_CONFIRM
 )
 from module.umamusume.asset.template import (
-    UI_SCENARIO, REF_CULTIVATE_SUPPORT_CARD_EMPTY
+    UI_SCENARIO, REF_CULTIVATE_SUPPORT_CARD_EMPTY, UI_CULTIVATE_UMAMUSUME_SELECT,
+    UI_CULTIVATE_EXTEND_UMAMUSUME_SELECT, UI_CULTIVATE_SUPPORT_CARD_SELECT,
+    UI_CULTIVATE_FOLLOW_SUPPORT_CARD_SELECT, REF_NEXT, REF_NEXT2
 )
 from module.umamusume.script.cultivate_task.parse import parse_factor
 
@@ -37,10 +39,30 @@ def is_home_screen(ctx):
         return False
 
 
+def click_next_button(ctx: UmamusumeContext, prefer_right=False):
+    img_gray = ctx.ctrl.get_screen(to_gray=True)
+
+    next_match = image_match(img_gray, REF_NEXT)
+    if next_match.find_match:
+        ctx.ctrl.click(next_match.center_point[0], next_match.center_point[1], "REF_NEXT")
+        return True
+        
+    next2_match = image_match(img_gray, REF_NEXT2)
+    if next2_match.find_match:
+        ctx.ctrl.click(next2_match.center_point[0], next2_match.center_point[1], "REF_NEXT2")
+        return True
+        
+    if prefer_right:
+        ctx.ctrl.click_by_point(TO_CULTIVATE_PREPARE_NEXT_RIGHT)
+    else:
+        ctx.ctrl.click_by_point(TO_CULTIVATE_PREPARE_NEXT)
+    return False
+
+
 def script_main_menu(ctx: UmamusumeContext):
     if ctx.cultivate_detail.cultivate_finish:
-        import bot.conn.u2_ctrl as u2c
-        u2c.IN_CAREER_RUN = False
+        from bot.base.runtime_state import get_state
+        get_state()["in_career_run"] = False
         mode_name = getattr(ctx.task.task_execute_mode, "name", None)
         if mode_name == "TASK_EXECUTE_MODE_FULL_AUTO":
             log.info("career run completed in full auto mode - resetting for next run")
@@ -57,8 +79,8 @@ def script_main_menu(ctx: UmamusumeContext):
         current_date = getattr(ctx.cultivate_detail.turn_info, 'date', 0) if ctx.cultivate_detail.turn_info else 0
         if current_date > 0:
             log.info(f"home screen post career date={current_date}")
-            import bot.conn.u2_ctrl as u2c
-            u2c.IN_CAREER_RUN = False
+            from bot.base.runtime_state import get_state
+            get_state()["in_career_run"] = False
             ctx.cultivate_detail.cultivate_finish = True
             mode_name = getattr(ctx.task.task_execute_mode, "name", None)
             if mode_name == "TASK_EXECUTE_MODE_FULL_AUTO":
@@ -76,19 +98,32 @@ def script_main_menu(ctx: UmamusumeContext):
 
 
 def script_scenario_select(ctx: UmamusumeContext):
+    img_gray = ctx.ctrl.get_screen(to_gray=True)
+    next_match = image_match(img_gray, REF_NEXT)
+    
+    if next_match.find_match and next_match.center_point[0] > 400:
+        return
+
+    if image_match(img_gray, UI_CULTIVATE_UMAMUSUME_SELECT).find_match or \
+       image_match(img_gray, UI_CULTIVATE_EXTEND_UMAMUSUME_SELECT).find_match or \
+       image_match(img_gray, UI_CULTIVATE_SUPPORT_CARD_SELECT).find_match or \
+       image_match(img_gray, UI_CULTIVATE_FOLLOW_SUPPORT_CARD_SELECT).find_match:
+        return
+
     target_scenario = ctx.cultivate_detail.scenario.scenario_type()
     time.sleep(2)
 
-    for i in range(1, len(ScenarioType)):
-        img = ctx.ctrl.get_screen(to_gray=True)
+    for i in range(1, 15):
+        img_gray = ctx.ctrl.get_screen(to_gray=True)
 
-        if image_match(img, UI_SCENARIO[target_scenario]).find_match:
+        match = image_match(img_gray, UI_SCENARIO[target_scenario])
+        if match.find_match or match.score > 0.50:
             log.info(f"Found target cultivation scenario {ctx.cultivate_detail.scenario.scenario_name()}")
-            ctx.ctrl.click_by_point(TO_CULTIVATE_PREPARE_NEXT)
+            click_next_button(ctx, prefer_right=False)
             return
 
         log.debug(f"Scenario does not match, checking next scenario")
-        ctx.ctrl.swipe(x1=400, y1=600, x2=500, y2=600, duration=300, name="swipe right")
+        ctx.ctrl.swipe(x1=400, y1=600, x2=500, y2=600, duration=0.3, name="swipe right")
         time.sleep(0.7)
 
     log.error(f"Could not find specified scenario")
@@ -96,35 +131,54 @@ def script_scenario_select(ctx: UmamusumeContext):
 
 
 def script_umamusume_select(ctx: UmamusumeContext):
-    ctx.ctrl.click_by_point(TO_CULTIVATE_PREPARE_NEXT)
+    img_gray = ctx.ctrl.get_screen(to_gray=True)
+    if image_match(img_gray, UI_CULTIVATE_EXTEND_UMAMUSUME_SELECT).find_match or \
+       image_match(img_gray, UI_CULTIVATE_SUPPORT_CARD_SELECT).find_match or \
+       image_match(img_gray, UI_CULTIVATE_FOLLOW_SUPPORT_CARD_SELECT).find_match:
+        return
+    time.sleep(2)
+    click_next_button(ctx, prefer_right=True)
+    time.sleep(2.5)
 
 
 def script_extend_umamusume_select(ctx: UmamusumeContext):
+    img_gray = ctx.ctrl.get_screen(to_gray=True)
+    if image_match(img_gray, UI_CULTIVATE_SUPPORT_CARD_SELECT).find_match or \
+       image_match(img_gray, UI_CULTIVATE_FOLLOW_SUPPORT_CARD_SELECT).find_match:
+        return
     try:
         if getattr(ctx.cultivate_detail, 'use_last_parents', False):
-            ctx.ctrl.click_by_point(TO_CULTIVATE_PREPARE_NEXT)
+            click_next_button(ctx, prefer_right=True)
+            time.sleep(2.5)
             return
     except Exception:
         pass
     ctx.ctrl.click_by_point(TO_CULTIVATE_PREPARE_AUTO_SELECT)
-    time.sleep(0.5)
+    time.sleep(1.0)
     ctx.ctrl.click_by_point(TO_CULTIVATE_PREPARE_INCLUDE_GUEST)
-    time.sleep(0.5)
+    time.sleep(1.0)
     ctx.ctrl.click_by_point(TO_CULTIVATE_PREPARE_CONFIRM)
-    time.sleep(0.5)
-    ctx.ctrl.click_by_point(TO_CULTIVATE_PREPARE_NEXT)
+    time.sleep(1.5)
+    click_next_button(ctx, prefer_right=True)
+    time.sleep(2.5)
 
 
 def script_support_card_select(ctx: UmamusumeContext):
+    time.sleep(1.5)
     img = ctx.ctrl.get_screen(to_gray=True)
-    if image_match(img, REF_CULTIVATE_SUPPORT_CARD_EMPTY).find_match:
-        import bot.conn.u2_ctrl as u2c
-        ctx.ctrl.click_by_point(TO_FOLLOW_SUPPORT_CARD_SELECT)
-        u2c.INPUT_BLOCKED = True
-        time.sleep(1.0)
-        u2c.INPUT_BLOCKED = False
+
+    if image_match(img, UI_CULTIVATE_FOLLOW_SUPPORT_CARD_SELECT).find_match:
         return
-    ctx.ctrl.click_by_point(TO_CULTIVATE_PREPARE_NEXT)
+
+    if image_match(img, REF_CULTIVATE_SUPPORT_CARD_EMPTY).find_match:
+        from bot.base.runtime_state import get_state
+        state = get_state()
+        ctx.ctrl.click_by_point(TO_FOLLOW_SUPPORT_CARD_SELECT)
+        state["input_blocked"] = True
+        time.sleep(1.0)
+        state["input_blocked"] = False
+        return
+    click_next_button(ctx, prefer_right=False)
 
 
 def script_cultivate_final_check(ctx: UmamusumeContext):

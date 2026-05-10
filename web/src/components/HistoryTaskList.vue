@@ -25,3 +25,4 @@ export default {
 <style scoped>
 .card-body{border-bottom:1px solid rgba(255,255,255,.06)}
 </style>
+

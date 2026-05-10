@@ -2,7 +2,7 @@
   <div>
     <div class="card">
       <div class="card-body">
-        <div class="d-flex align-items-center mb-3" style="gap:12px">
+        <div class="d-flex align-items-center mb-3 gap-12px">
           <h5 class="mb-0">Runtime Logs</h5>
           <div class="ml-auto"></div>
           <button @click="toggleAutoLog" class="btn btn-sm" :class="autoLog ? 'btn--primary' : 'btn--outline'">
@@ -25,13 +25,13 @@ export default {
   data(){
     return{ autoScroll: true }
   },
-  updated(){
-    if (this.autoScroll){
-      const textarea = document.getElementById('scroll_text');
-      textarea.scrollTop = textarea.scrollHeight;
-    }
+   updated(){
+     if (this.autoScroll){
+       const textarea = document.getElementById('scroll_text');
+       textarea.scrollTop = textarea.scrollHeight;
+     }
+    },
   }
-}
 </script>
 
 <style scoped>

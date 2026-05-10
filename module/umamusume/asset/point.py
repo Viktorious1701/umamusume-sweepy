@@ -4,7 +4,8 @@ from module.umamusume.asset.template import *
 
 # cultivate
 TO_CULTIVATE_SCENARIO_CHOOSE = ClickPoint(ClickPointType.CLICK_POINT_TYPE_COORDINATE, None, Coordinate(545, 1085), "Go to Scenario Selection", None)
-TO_CULTIVATE_PREPARE_NEXT = ClickPoint(ClickPointType.CLICK_POINT_TYPE_COORDINATE, None, Coordinate(355, 1080), "Cultivation Preparation - Next Step")
+TO_CULTIVATE_PREPARE_NEXT = ClickPoint(ClickPointType.CLICK_POINT_TYPE_COORDINATE, None, Coordinate(360, 1110), "Cultivation Preparation - Next Step")
+TO_CULTIVATE_PREPARE_NEXT_RIGHT = ClickPoint(ClickPointType.CLICK_POINT_TYPE_COORDINATE, None, Coordinate(540, 1110), "Cultivation Preparation - Next Step (Right)")
 TO_CULTIVATE_PREPARE_AUTO_SELECT = ClickPoint(ClickPointType.CLICK_POINT_TYPE_COORDINATE, None, Coordinate(518, 972), "Cultivation Preparation - Auto Select")
 TO_CULTIVATE_PREPARE_INCLUDE_GUEST = ClickPoint(ClickPointType.CLICK_POINT_TYPE_COORDINATE, None, Coordinate(279, 694), "Cultivation Preparation - Include Guest")
 TO_CULTIVATE_PREPARE_CONFIRM = ClickPoint(ClickPointType.CLICK_POINT_TYPE_COORDINATE, None, Coordinate(519, 831), "Cultivation Preparation - Confirm")
@@ -39,7 +40,7 @@ BEFORE_RACE_CHANGE_TACTIC_4 = ClickPoint(ClickPointType.CLICK_POINT_TYPE_COORDIN
 BEFORE_RACE_CHANGE_TACTIC_3 = ClickPoint(ClickPointType.CLICK_POINT_TYPE_COORDINATE, None, Coordinate(435, 780), "Change Tactics - Chaser", None)
 BEFORE_RACE_CHANGE_TACTIC_2 = ClickPoint(ClickPointType.CLICK_POINT_TYPE_COORDINATE, None, Coordinate(285, 780), "Change Tactics - Middle", None)
 BEFORE_RACE_CHANGE_TACTIC_1 = ClickPoint(ClickPointType.CLICK_POINT_TYPE_COORDINATE, None, Coordinate(125, 780), "Change Tactics - Closer", None)
-TACTIC_LIST = [BEFORE_RACE_CHANGE_TACTIC_1, BEFORE_RACE_CHANGE_TACTIC_2, BEFORE_RACE_CHANGE_TACTIC_3, BEFORE_RACE_CHANGE_TACTIC_4]
+TACTIC_LIST = (BEFORE_RACE_CHANGE_TACTIC_1, BEFORE_RACE_CHANGE_TACTIC_2, BEFORE_RACE_CHANGE_TACTIC_3, BEFORE_RACE_CHANGE_TACTIC_4)
 
 BEFORE_RACE_CHANGE_TACTIC_CONFIRM = ClickPoint(ClickPointType.CLICK_POINT_TYPE_COORDINATE, None, Coordinate(515, 920), "Change Tactics - Confirm", None)
 BEFORE_RACE_START = ClickPoint(ClickPointType.CLICK_POINT_TYPE_COORDINATE, None, Coordinate(465, 1175), "Before Race - Start Race", None)
@@ -72,8 +73,8 @@ TRAINING_SELECT_INTELLIGENCE = ClickPoint(ClickPointType.CLICK_POINT_TYPE_COORDI
 TRAINING_SELECT_GUTS = TRAINING_SELECT_WILL
 TRAINING_SELECT_WIT = TRAINING_SELECT_INTELLIGENCE
 
-TRAINING_POINT_LIST = [TRAINING_SELECT_SPEED, TRAINING_SELECT_STAMINA, TRAINING_SELECT_POWER,
-                       TRAINING_SELECT_GUTS, TRAINING_SELECT_WIT]
+TRAINING_POINT_LIST = (TRAINING_SELECT_SPEED, TRAINING_SELECT_STAMINA, TRAINING_SELECT_POWER,
+                       TRAINING_SELECT_GUTS, TRAINING_SELECT_WIT)
 
 INFO_SUMMER_REST_CONFIRM = ClickPoint(ClickPointType.CLICK_POINT_TYPE_COORDINATE, None, Coordinate(520,835), "Rest - Summer Camp - Confirm", None)
 NETWORK_ERROR_CONFIRM = ClickPoint(ClickPointType.CLICK_POINT_TYPE_COORDINATE,None, Coordinate(520,835), "Network Error - Confirm", None)

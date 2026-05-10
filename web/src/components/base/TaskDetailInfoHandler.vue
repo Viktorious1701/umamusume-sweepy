@@ -52,7 +52,7 @@ export default {
         console.error("Failed to delete task:", err)
       })
     },
-  }
+   }
 }
 </script>
 

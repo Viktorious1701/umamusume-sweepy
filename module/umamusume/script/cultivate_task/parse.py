@@ -1,3 +1,16 @@
+from module.umamusume.constants.cache_constants import (
+    PARSE_EVENT_CACHE_SIZE, OCR_CACHE_SIZE, GRAY_IMAGE_CACHE_SIZE, TEMPLATE_MATCH_CACHE_SIZE
+)
+from module.umamusume.script.cultivate_task.const import DATE_YEAR, DATE_MONTH
+import bot.base.log as logger
+from module.umamusume.define import *
+from module.umamusume.asset import *
+from module.umamusume.types import SupportCardInfo
+from module.umamusume.context import UmamusumeContext
+from module.umamusume.asset.race_data import RACE_LIST, UMAMUSUME_RACE_TEMPLATE_PATH
+from bot.recog.ocr import ocr_line, find_similar_text
+from bot.recog.image_matcher import image_match, compare_color_equal
+from bot.base.task import TaskStatus, EndTaskReason
 import re
 from difflib import SequenceMatcher
 
@@ -11,21 +24,9 @@ import os
 
 DIGITS_ONLY = re.compile(r"\D")
 
-from bot.base.task import TaskStatus, EndTaskReason
-from bot.recog.image_matcher import image_match, compare_color_equal
-from bot.recog.ocr import ocr_line, find_similar_text
-from module.umamusume.asset.race_data import RACE_LIST, UMAMUSUME_RACE_TEMPLATE_PATH
-from module.umamusume.context import UmamusumeContext
-from module.umamusume.types import SupportCardInfo
-from module.umamusume.asset import *
-from module.umamusume.define import *
-import bot.base.log as logger
-from module.umamusume.script.cultivate_task.const import DATE_YEAR, DATE_MONTH
-from module.umamusume.constants.cache_constants import (
-    PARSE_EVENT_CACHE_SIZE, OCR_CACHE_SIZE, GRAY_IMAGE_CACHE_SIZE, TEMPLATE_MATCH_CACHE_SIZE
-)
 
 log = logger.get_logger(__name__)
+
 
 class LRUCache:
     def __init__(self, maxsize=2000):
@@ -51,10 +52,12 @@ class LRUCache:
     def __contains__(self, key):
         return key in self.cache
 
+
 _parse_event_cache = LRUCache(maxsize=PARSE_EVENT_CACHE_SIZE)
 _ocr_cache = LRUCache(maxsize=OCR_CACHE_SIZE)
 _gray_image_cache = LRUCache(maxsize=GRAY_IMAGE_CACHE_SIZE)
 _template_match_cache = LRUCache(maxsize=TEMPLATE_MATCH_CACHE_SIZE)
+
 
 def _compute_image_hash(img):
     try:
@@ -67,6 +70,7 @@ def _compute_image_hash(img):
         return h
     except:
         return None
+
 
 def clear_parse_caches():
     global _parse_event_cache, _ocr_cache, _gray_image_cache, _template_match_cache
@@ -104,12 +108,14 @@ def jaccard_counter_ratio(a: Counter, b: Counter) -> float:
 
 skills_database_cache = None
 
+
 def load_skills_database():
     global skills_database_cache
     if skills_database_cache is not None:
         return skills_database_cache
     try:
-        json_path = os.path.join('web', 'src', 'assets', 'umamusume_final_skills_fixed.json')
+        json_path = os.path.join(
+            'web', 'src', 'assets', 'umamusume_final_skills_fixed.json')
         with open(json_path, 'r', encoding='utf-8') as f:
             data = json.load(f)
         names = []
@@ -142,7 +148,8 @@ def get_canonical_skill_name(skill_name: str) -> str:
         for original in names:
             normalized = normalize_text_for_match(original)
             tokens = set(normalized.split())
-            entry = (original, normalized, len(normalized), build_bigrams(normalized), tokens)
+            entry = (original, normalized, len(normalized),
+                     build_bigrams(normalized), tokens)
             cache_list.append(entry)
             norm_map[normalized] = original
             idx = len(cache_list) - 1
@@ -166,12 +173,14 @@ def get_canonical_skill_name(skill_name: str) -> str:
                 candidate_indices.add(idx)
     iterable = candidate_indices or range(len(index_cache))
     for idx in iterable:
-        original_key, normalized_key, normalized_length, normalized_bigrams, normalized_tokens = index_cache[idx]
+        original_key, normalized_key, normalized_length, normalized_bigrams, normalized_tokens = index_cache[
+            idx]
         if not query or not normalized_key:
             continue
         if query in normalized_key or normalized_key in query:
             score = 1.0
-            len_ratio = min(qlen, normalized_length) / max(qlen, normalized_length) if max(qlen, normalized_length) else 1.0
+            len_ratio = min(qlen, normalized_length) / max(qlen,
+                                                           normalized_length) if max(qlen, normalized_length) else 1.0
             if score > best_score or (score == best_score and len_ratio > best_len_ratio):
                 best_score = score
                 best_len_ratio = len_ratio
@@ -182,12 +191,14 @@ def get_canonical_skill_name(skill_name: str) -> str:
         token_score = token_inter / token_union
         bigram_score = jaccard_counter_ratio(q_bigrams, normalized_bigrams)
         if normalized_length == qlen:
-            positional = sum(1 for i in range(qlen) if query[i] == normalized_key[i]) / qlen if qlen else 0.0
+            positional = sum(1 for i in range(
+                qlen) if query[i] == normalized_key[i]) / qlen if qlen else 0.0
             score = max(bigram_score, token_score, positional)
             len_ratio = 1.0
         else:
             score = max(bigram_score, token_score)
-            len_ratio = min(qlen, normalized_length) / max(qlen, normalized_length)
+            len_ratio = min(qlen, normalized_length) / \
+                max(qlen, normalized_length)
         if score > best_score or (score == best_score and len_ratio > best_len_ratio):
             best_score = score
             best_len_ratio = len_ratio
@@ -222,10 +233,12 @@ def try_alt_cost_regions(skill_info_img):
 def parse_date(img, ctx: UmamusumeContext) -> int:
     return _parse_date_internal(img, ctx)
 
+
 def _parse_date_internal(img, ctx: UmamusumeContext) -> int:
     if ctx.cultivate_detail.scenario.scenario_type() == ScenarioType.SCENARIO_TYPE_AOHARUHAI:
         sub_img_date = ctx.cultivate_detail.scenario.get_date_img(img)
-        sub_img_date = cv2.copyMakeBorder(sub_img_date, 20, 20, 20, 20, cv2.BORDER_CONSTANT, None, (255, 255, 255))
+        sub_img_date = cv2.copyMakeBorder(
+            sub_img_date, 20, 20, 20, 20, cv2.BORDER_CONSTANT, None, (255, 255, 255))
         date_text = ocr_line(sub_img_date)
 
         year_text = ""
@@ -234,7 +247,8 @@ def _parse_date_internal(img, ctx: UmamusumeContext) -> int:
                 year_text = text
 
         if year_text == "":
-            VALID_YEAR_KEYWORDS = ('junior', 'classic', 'senior', 'finals', 'finale')
+            VALID_YEAR_KEYWORDS = ('junior', 'classic',
+                                   'senior', 'finals', 'finale')
             date_lower = date_text.lower()
             if not any(kw in date_lower for kw in VALID_YEAR_KEYWORDS):
                 return -1
@@ -260,9 +274,11 @@ def _parse_date_internal(img, ctx: UmamusumeContext) -> int:
             month_text = find_similar_text(date_text, DATE_MONTH)
 
         if month_text != DATE_MONTH[0]:
-            date_id = DATE_YEAR.index(year_text) * 24 + DATE_MONTH.index(month_text)
+            date_id = DATE_YEAR.index(year_text) * \
+                24 + DATE_MONTH.index(month_text)
         else:
-            sub_img_turn_to_race = ctx.cultivate_detail.scenario.get_turn_to_race_img(img)
+            sub_img_turn_to_race = ctx.cultivate_detail.scenario.get_turn_to_race_img(
+                img)
             sub_img_turn_to_race = cv2.copyMakeBorder(sub_img_turn_to_race, 20, 20, 20, 20, cv2.BORDER_CONSTANT, None,
                                                       (255, 255, 255))
             turn_to_race_text = ocr_line(sub_img_turn_to_race)
@@ -277,7 +293,8 @@ def _parse_date_internal(img, ctx: UmamusumeContext) -> int:
         return date_id
     else:
         sub_img_date = ctx.cultivate_detail.scenario.get_date_img(img)
-        sub_img_date = cv2.copyMakeBorder(sub_img_date, 20, 20, 20, 20, cv2.BORDER_CONSTANT, None, (255, 255, 255))
+        sub_img_date = cv2.copyMakeBorder(
+            sub_img_date, 20, 20, 20, 20, cv2.BORDER_CONSTANT, None, (255, 255, 255))
         date_text = ocr_line(sub_img_date)
 
         if "Climax" in date_text or "TS Climax" in date_text:
@@ -285,7 +302,8 @@ def _parse_date_internal(img, ctx: UmamusumeContext) -> int:
 
         if "Finale Season" in date_text or "Finale" in date_text:
             championship_phase_img = img[74:100, 250:575]
-            championship_phase_img = cv2.copyMakeBorder(championship_phase_img, 20, 20, 20, 20, cv2.BORDER_CONSTANT, None, (255, 255, 255))
+            championship_phase_img = cv2.copyMakeBorder(
+                championship_phase_img, 20, 20, 20, 20, cv2.BORDER_CONSTANT, None, (255, 255, 255))
             championship_phase_text = ocr_line(championship_phase_img)
 
             if "URA Finale Qualifier" in championship_phase_text or "Qualifier" in championship_phase_text:
@@ -303,7 +321,8 @@ def _parse_date_internal(img, ctx: UmamusumeContext) -> int:
                 year_text = text
 
         if year_text == "":
-            VALID_YEAR_KEYWORDS = ('junior', 'classic', 'senior', 'finals', 'finale')
+            VALID_YEAR_KEYWORDS = ('junior', 'classic',
+                                   'senior', 'finals', 'finale')
             date_lower = date_text.lower()
             if not any(kw in date_lower for kw in VALID_YEAR_KEYWORDS):
                 return -1
@@ -329,9 +348,11 @@ def _parse_date_internal(img, ctx: UmamusumeContext) -> int:
             month_text = find_similar_text(date_text, DATE_MONTH)
 
         if month_text != DATE_MONTH[0]:
-            date_id = DATE_YEAR.index(year_text) * 24 + DATE_MONTH.index(month_text)
+            date_id = DATE_YEAR.index(year_text) * \
+                24 + DATE_MONTH.index(month_text)
         else:
-            sub_img_turn_to_race = ctx.cultivate_detail.scenario.get_turn_to_race_img(img)
+            sub_img_turn_to_race = ctx.cultivate_detail.scenario.get_turn_to_race_img(
+                img)
             sub_img_turn_to_race = cv2.copyMakeBorder(sub_img_turn_to_race, 20, 20, 20, 20, cv2.BORDER_CONSTANT, None,
                                                       (255, 255, 255))
             turn_to_race_text = ocr_line(sub_img_turn_to_race)
@@ -363,19 +384,23 @@ def parse_debut_race(ctx: UmamusumeContext, img):
 
 def parse_umamusume_basic_ability_value(ctx: UmamusumeContext, img):
     sub_img_speed = img[855:885, 70:139]
-    sub_img_speed = cv2.copyMakeBorder(sub_img_speed, 20, 20, 20, 20, cv2.BORDER_CONSTANT, None, (255, 255, 255))
+    sub_img_speed = cv2.copyMakeBorder(
+        sub_img_speed, 20, 20, 20, 20, cv2.BORDER_CONSTANT, None, (255, 255, 255))
     speed_text = ocr_line(sub_img_speed)
 
     sub_img_stamina = img[855:885, 183:251]
-    sub_img_stamina = cv2.copyMakeBorder(sub_img_stamina, 20, 20, 20, 20, cv2.BORDER_CONSTANT, None, (255, 255, 255))
+    sub_img_stamina = cv2.copyMakeBorder(
+        sub_img_stamina, 20, 20, 20, 20, cv2.BORDER_CONSTANT, None, (255, 255, 255))
     stamina_text = ocr_line(sub_img_stamina)
 
     sub_img_power = img[855:885, 289:364]
-    sub_img_power = cv2.copyMakeBorder(sub_img_power, 20, 20, 20, 20, cv2.BORDER_CONSTANT, None, (255, 255, 255))
+    sub_img_power = cv2.copyMakeBorder(
+        sub_img_power, 20, 20, 20, 20, cv2.BORDER_CONSTANT, None, (255, 255, 255))
     power_text = ocr_line(sub_img_power)
 
     sub_img_will = img[855:885, 409:476]
-    sub_img_will = cv2.copyMakeBorder(sub_img_will, 20, 20, 20, 20, cv2.BORDER_CONSTANT, None, (255, 255, 255))
+    sub_img_will = cv2.copyMakeBorder(
+        sub_img_will, 20, 20, 20, 20, cv2.BORDER_CONSTANT, None, (255, 255, 255))
     will_text = ocr_line(sub_img_will)
 
     sub_img_intelligence = img[855:885, 521:588]
@@ -398,7 +423,8 @@ def parse_umamusume_basic_ability_value(ctx: UmamusumeContext, img):
                                                                               TrainingType.TRAINING_TYPE_WILL)
     ctx.cultivate_detail.turn_info.uma_attribute.intelligence = trans_attribute_value(intelligence_text, ctx,
                                                                                       TrainingType.TRAINING_TYPE_INTELLIGENCE)
-    ctx.cultivate_detail.turn_info.uma_attribute.skill_point = trans_attribute_value(skill_point_text, ctx)
+    ctx.cultivate_detail.turn_info.uma_attribute.skill_point = trans_attribute_value(
+        skill_point_text, ctx)
 
 
 def trans_attribute_value(text: str, ctx: UmamusumeContext,
@@ -432,14 +458,13 @@ def parse_train_main_menu_operations_availability(ctx: UmamusumeContext, img):
     btn_rest_check_point = img[980, 60]
     btn_train_check_point = img[990, 250]
     btn_skill_check_point = img[980, 550]
-    btn_medic_room_check_point = img[1125, 105]
+    btn_medic_room_check_point = img[1125, 105]  # Adjusted check coordinate
     btn_trip_check_point = img[1115, 305]
     btn_race_check_point = img[1130, 490]
 
     from module.umamusume.define import ScenarioType
     if ctx.cultivate_detail.scenario.scenario_type() == ScenarioType.SCENARIO_TYPE_MANT:
         btn_medic_room_check_point = img[1125, 43]
-
 
     if ctx.cultivate_detail.turn_info and ctx.cultivate_detail.turn_info.date and (36 < ctx.cultivate_detail.turn_info.date <= 40 or 60 < ctx.cultivate_detail.turn_info.date <= 64):
         btn_medic_room_check_point = img[1130, 200]
@@ -449,11 +474,13 @@ def parse_train_main_menu_operations_availability(ctx: UmamusumeContext, img):
     rest_available = btn_rest_check_point[0] > 200
     train_available = btn_train_check_point[0] > 200
     skill_available = btn_skill_check_point[0] > 200
-    if btn_medic_room_check_point[0] > 200 and btn_medic_room_check_point[1] > 200 and btn_medic_room_check_point[
-        2] > 200:
+
+    # Increased threshold to 235 to avoid false positives from UI glow
+    if btn_medic_room_check_point[0] > 235 and btn_medic_room_check_point[1] > 235 and btn_medic_room_check_point[2] > 235:
         medic_room_available = True
     else:
         medic_room_available = False
+
     trip_available = btn_trip_check_point[0] > 200
     race_available = btn_race_check_point[0] > 200
 
@@ -462,14 +489,16 @@ def parse_train_main_menu_operations_availability(ctx: UmamusumeContext, img):
 
 
 def parse_training_support_card(ctx: UmamusumeContext, img, train_type: TrainingType):
-    support_card_info_list = ctx.cultivate_detail.scenario.parse_training_support_card(img)
+    support_card_info_list = ctx.cultivate_detail.scenario.parse_training_support_card(
+        img)
     if len(support_card_info_list) == 0:
         import time
         ctx.ctrl.reinit_connection()
         time.sleep(0.2)
         fresh_img = ctx.ctrl.get_screen()
         if fresh_img is not None:
-            support_card_info_list = ctx.cultivate_detail.scenario.parse_training_support_card(fresh_img)
+            support_card_info_list = ctx.cultivate_detail.scenario.parse_training_support_card(
+                fresh_img)
     from module.umamusume.define import SupportCardType
     tt_map = {
         TrainingType.TRAINING_TYPE_SPEED: SupportCardType.SUPPORT_CARD_TYPE_SPEED,
@@ -487,14 +516,17 @@ def parse_training_support_card(ctx: UmamusumeContext, img, train_type: Training
             relevant_count += 1
     til.relevant_count = relevant_count
 
+
 def parse_train_type(ctx: UmamusumeContext, img) -> TrainingType:
     try:
         if img is None or getattr(img, 'size', 0) == 0:
             return TrainingType.TRAINING_TYPE_UNKNOWN
         h, w = img.shape[:2]
         y1, y2, x1, x2 = 210, 275, 0, 210
-        y1 = max(0, min(h, y1)); y2 = max(y1, min(h, y2))
-        x1 = max(0, min(w, x1)); x2 = max(x1, min(w, x2))
+        y1 = max(0, min(h, y1))
+        y2 = max(y1, min(h, y2))
+        x1 = max(0, min(w, x1))
+        x2 = max(x1, min(w, x2))
         roi = img[y1:y2, x1:x2]
         if roi is None or getattr(roi, 'size', 0) == 0:
             return TrainingType.TRAINING_TYPE_UNKNOWN
@@ -518,12 +550,18 @@ def parse_train_type(ctx: UmamusumeContext, img) -> TrainingType:
 def parse_training_result(ctx: UmamusumeContext, img, train_type: TrainingType):
     train_incr = ctx.cultivate_detail.scenario.parse_training_result(img)
 
-    ctx.cultivate_detail.turn_info.training_info_list[train_type.value - 1].speed_incr = train_incr[0]
-    ctx.cultivate_detail.turn_info.training_info_list[train_type.value - 1].stamina_incr = train_incr[1]
-    ctx.cultivate_detail.turn_info.training_info_list[train_type.value - 1].power_incr = train_incr[2]
-    ctx.cultivate_detail.turn_info.training_info_list[train_type.value - 1].will_incr = train_incr[3]
-    ctx.cultivate_detail.turn_info.training_info_list[train_type.value - 1].intelligence_incr = train_incr[4]
-    ctx.cultivate_detail.turn_info.training_info_list[train_type.value - 1].skill_point_incr = train_incr[5]
+    ctx.cultivate_detail.turn_info.training_info_list[train_type.value -
+                                                      1].speed_incr = train_incr[0]
+    ctx.cultivate_detail.turn_info.training_info_list[train_type.value -
+                                                      1].stamina_incr = train_incr[1]
+    ctx.cultivate_detail.turn_info.training_info_list[train_type.value -
+                                                      1].power_incr = train_incr[2]
+    ctx.cultivate_detail.turn_info.training_info_list[train_type.value -
+                                                      1].will_incr = train_incr[3]
+    ctx.cultivate_detail.turn_info.training_info_list[train_type.value -
+                                                      1].intelligence_incr = train_incr[4]
+    ctx.cultivate_detail.turn_info.training_info_list[train_type.value -
+                                                      1].skill_point_incr = train_incr[5]
 
 
 def parse_failure_rates(ctx: UmamusumeContext, img, train_type: TrainingType | None = None):
@@ -541,10 +579,13 @@ def parse_failure_rates(ctx: UmamusumeContext, img, train_type: TrainingType | N
         rates = []
         for (x1, x2) in x_ranges:
             h, w = img.shape[:2]
-            y1c = max(0, min(h, y1)); y2c = max(y1c, min(h, y2))
-            x1c = max(0, min(w, x1)); x2c = max(x1c, min(w, x2))
+            y1c = max(0, min(h, y1))
+            y2c = max(y1c, min(h, y2))
+            x1c = max(0, min(w, x1))
+            x2c = max(x1c, min(w, x2))
             roi = img[y1c:y2c, x1c:x2c]
-            roi = cv2.copyMakeBorder(roi, 10, 10, 10, 10, cv2.BORDER_CONSTANT, None, (255, 255, 255))
+            roi = cv2.copyMakeBorder(
+                roi, 10, 10, 10, 10, cv2.BORDER_CONSTANT, None, (255, 255, 255))
             text = ocr_line(roi, lang="en")
             import re
             digits = re.sub("\\D", "", text)
@@ -558,7 +599,8 @@ def parse_failure_rates(ctx: UmamusumeContext, img, train_type: TrainingType | N
         if train_type is not None and isinstance(train_type, TrainingType) and 1 <= train_type.value <= 5:
             idx = train_type.value - 1
             try:
-                ctx.cultivate_detail.turn_info.training_info_list[idx].failure_rate = rates[idx] if idx < len(rates) else -1
+                ctx.cultivate_detail.turn_info.training_info_list[idx].failure_rate = rates[idx] if idx < len(
+                    rates) else -1
             except Exception:
                 pass
         else:
@@ -579,9 +621,10 @@ def find_support_card(ctx: UmamusumeContext, img):
         match_result = image_match(img, REF_FOLLOW_SUPPORT_CARD_DETECT_LABEL)
         if match_result.find_match:
             pos = match_result.matched_area
-            support_card_info = img[pos[0][1] - 125:pos[1][1] + 10, pos[0][0] - 140: pos[1][0] + 380]
+            support_card_info = img[pos[0][1] - 125:pos[1]
+                                    [1] + 10, pos[0][0] - 140: pos[1][0] + 380]
             img[match_result.matched_area[0][1]:match_result.matched_area[1][1],
-            match_result.matched_area[0][0]:match_result.matched_area[1][0]] = 0
+                match_result.matched_area[0][0]:match_result.matched_area[1][0]] = 0
             img = img.copy()
             support_card_level_img = support_card_info[125:145, 68:111]
             support_card_name_img = support_card_info[63:94, 132:439]
@@ -601,7 +644,8 @@ def find_support_card(ctx: UmamusumeContext, img):
             if support_card_level < ctx.cultivate_detail.follow_support_card_level:
                 continue
             support_card_text = ocr_line(support_card_name_img)
-            s = SequenceMatcher(None, support_card_text, ctx.cultivate_detail.follow_support_card_name)
+            s = SequenceMatcher(None, support_card_text,
+                                ctx.cultivate_detail.follow_support_card_name)
             if s.ratio() > 0.7:
                 ctx.ctrl.click(match_result.center_point[0], match_result.center_point[1] - 75,
                                f"{ctx.cultivate_detail.follow_support_card_name}<{support_card_level}>")
@@ -649,7 +693,10 @@ def parse_cultivate_event(ctx: UmamusumeContext, img) -> tuple[str, list[int]]:
 
     x1, y1, x2, y2 = 24, 316, 696, 936
     h, w = img_gray.shape[:2]
-    x1 = max(0, min(w, x1)); x2 = max(x1, min(w, x2)); y1 = max(0, min(h, y1)); y2 = max(y1, min(h, y2))
+    x1 = max(0, min(w, x1))
+    x2 = max(x1, min(w, x2))
+    y1 = max(0, min(h, y1))
+    y2 = max(y1, min(h, y2))
     search_img = img_gray[y1:y2, x1:x2].copy()
 
     all_points = []
@@ -660,7 +707,8 @@ def parse_cultivate_event(ctx: UmamusumeContext, img) -> tuple[str, list[int]]:
             match_result = image_match(img_temp, template)
             if not match_result.find_match:
                 break
-            abs_pt = (match_result.center_point[0] + x1, match_result.center_point[1] + y1)
+            abs_pt = (
+                match_result.center_point[0] + x1, match_result.center_point[1] + y1)
             all_points.append(abs_pt)
             m = match_result.matched_area
             img_temp[m[0][1]:m[1][1], m[0][0]:m[1][0]] = 0
@@ -683,8 +731,6 @@ def parse_cultivate_event(ctx: UmamusumeContext, img) -> tuple[str, list[int]]:
     return result
 
 
-
-
 def find_race(ctx: UmamusumeContext, img, race_id: int = 0) -> bool:
     img = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
     target_race_template = RACE_LIST[race_id][2]
@@ -692,7 +738,6 @@ def find_race(ctx: UmamusumeContext, img, race_id: int = 0) -> bool:
 
     if target_race_template is None:
         return False
-
 
     iterations = 0
     while iterations < 100:
@@ -713,8 +758,9 @@ def find_race(ctx: UmamusumeContext, img, race_id: int = 0) -> bool:
                 template_img = target_race_template.template_image
                 if (template_img is not None and
                     race_name_img.shape[0] >= template_img.shape[0] and
-                    race_name_img.shape[1] >= template_img.shape[1]):
-                    template_match_result = image_match(race_name_img, target_race_template)
+                        race_name_img.shape[1] >= template_img.shape[1]):
+                    template_match_result = image_match(
+                        race_name_img, target_race_template)
                     if template_match_result.find_match:
                         ctx.ctrl.click(pos_center[0], pos_center[1],
                                        f"Select race: {RACE_LIST[race_id][1]}")
@@ -723,9 +769,6 @@ def find_race(ctx: UmamusumeContext, img, race_id: int = 0) -> bool:
         img[pos[0][1]:pos[1][1], pos[0][0]:pos[1][0]] = 0
         img = img.copy()
     return False
-
-
-
 
 
 def find_skill(ctx: UmamusumeContext, img, skill: list[str], learn_any_skill: bool) -> bool:
@@ -739,7 +782,8 @@ def find_skill(ctx: UmamusumeContext, img, skill: list[str], learn_any_skill: bo
             pos = match_result.matched_area
             pos_center = match_result.center_point
             if 460 < pos_center[0] < 560 and 450 < pos_center[1] < 1050:
-                skill_info_img = img[pos[0][1] - 65:pos[1][1] + 75, pos[0][0] - 470: pos[1][0] + 150]
+                skill_info_img = img[pos[0][1] - 65:pos[1]
+                                     [1] + 75, pos[0][0] - 470: pos[1][0] + 150]
                 if not image_match(skill_info_img, REF_SKILL_LEARNED).find_match:
                     skill_name_img = skill_info_img[10: 47, 100: 445]
                     detected_text = ocr_en(skill_name_img)
@@ -758,18 +802,22 @@ def find_skill(ctx: UmamusumeContext, img, skill: list[str], learn_any_skill: bo
                             if abs(int(r) - 255) <= 8 and abs(int(g) - 145) <= 8 and abs(int(b) - 28) <= 8:
                                 rx1, ry1 = buy_x - 62, buy_y - 71
                                 rx2, ry2 = buy_x - 6, buy_y - 50
-                                rx1 = max(0, min(w0, rx1)); rx2 = max(rx1, min(w0, rx2))
-                                ry1 = max(0, min(h0, ry1)); ry2 = max(ry1, min(h0, ry2))
+                                rx1 = max(0, min(w0, rx1))
+                                rx2 = max(rx1, min(w0, rx2))
+                                ry1 = max(0, min(h0, ry1))
+                                ry2 = max(ry1, min(h0, ry2))
                                 roi = origin_img[ry1:ry2, rx1:rx2]
                                 if roi is not None and getattr(roi, 'size', 0) > 0:
-                                    roi_gray = cv2.cvtColor(roi, cv2.COLOR_BGR2GRAY)
+                                    roi_gray = cv2.cvtColor(
+                                        roi, cv2.COLOR_BGR2GRAY)
                                     best_lvl = 0
                                     best_score = 0.0
                                     for i, tpl in enumerate(REF_HINT_LEVELS):
                                         try:
                                             mr = image_match(roi_gray, tpl)
                                             if mr.find_match and getattr(mr, 'score', 0) > best_score:
-                                                best_score = float(getattr(mr, 'score', 0))
+                                                best_score = float(
+                                                    getattr(mr, 'score', 0))
                                                 best_lvl = i + 1
                                         except Exception:
                                             continue
@@ -779,24 +827,24 @@ def find_skill(ctx: UmamusumeContext, img, skill: list[str], learn_any_skill: bo
                     target_match = None
                     for target in skill:
                         if (normalize_text_for_match(name_for_match) == normalize_text_for_match(target)
-                            or normalize_text_for_match(detected_text) == normalize_text_for_match(target)):
+                                or normalize_text_for_match(detected_text) == normalize_text_for_match(target)):
                             target_match = target
                             break
 
                     if target_match is not None or learn_any_skill:
                         tmp_img = ctx.ctrl.get_screen()
-                        pt_text = re.sub("\\D", "", ocr_en(tmp_img[400: 440, 490: 665]))
-                        skill_pt_cost_text = re.sub("\\D", "", ocr_en(skill_info_img[69: 99, 525: 588]))
-
+                        pt_text = re.sub("\\D", "", ocr_en(
+                            tmp_img[400: 440, 490: 665]))
+                        skill_pt_cost_text = re.sub(
+                            "\\D", "", ocr_en(skill_info_img[69: 99, 525: 588]))
 
                         if not skill_pt_cost_text or skill_pt_cost_text == '':
-                            alt_cost, alt_idx = try_alt_cost_regions(skill_info_img)
+                            alt_cost, alt_idx = try_alt_cost_regions(
+                                skill_info_img)
                             if alt_cost:
                                 skill_pt_cost_text = alt_cost
                             if not skill_pt_cost_text or skill_pt_cost_text == '':
                                 skill_pt_cost_text = '1'
-
-
 
                         if pt_text != "" and skill_pt_cost_text != "":
                             pt = int(pt_text)
@@ -817,7 +865,7 @@ def find_skill(ctx: UmamusumeContext, img, skill: list[str], learn_any_skill: bo
                             pass
 
             img[match_result.matched_area[0][1]:match_result.matched_area[1][1],
-            match_result.matched_area[0][0]:match_result.matched_area[1][0]] = 0
+                match_result.matched_area[0][0]:match_result.matched_area[1][0]] = 0
             img = img.copy()
 
         else:
@@ -839,15 +887,16 @@ def get_skill_list(img, skill: list[str], skill_blacklist: list[str]) -> list:
             pos = match_result.matched_area
             pos_center = match_result.center_point
             if 460 < pos_center[0] < 560 and 450 < pos_center[1] < 1050:
-                skill_info_img = img[pos[0][1] - 65:pos[1][1] + 75, pos[0][0] - 470: pos[1][0] + 150]
-                skill_info_cp = origin_img[pos[0][1] - 65:pos[1][1] + 75, pos[0][0] - 470: pos[1][0] + 150]
+                skill_info_img = img[pos[0][1] - 65:pos[1]
+                                     [1] + 75, pos[0][0] - 470: pos[1][0] + 150]
+                skill_info_cp = origin_img[pos[0][1] - 65:pos[1]
+                                           [1] + 75, pos[0][0] - 470: pos[1][0] + 150]
 
                 skill_name_img = skill_info_img[10: 47, 100: 445]
                 skill_cost_img = skill_info_img[69: 99, 525: 588]
                 detected_text = ocr_en(skill_name_img)
                 cost_text = ocr_en(skill_cost_img)
                 cost = re.sub("\\D", "", cost_text)
-
 
                 if not cost or cost == '':
                     alt_cost, alt_idx = try_alt_cost_regions(skill_info_img)
@@ -856,8 +905,8 @@ def get_skill_list(img, skill: list[str], skill_blacklist: list[str]) -> list:
                     if not cost or cost == '':
                         cost = '1'
 
-
-                mask = cv2.inRange(skill_info_cp, numpy.array([40, 180, 240]), numpy.array([100, 210, 255]))
+                mask = cv2.inRange(skill_info_cp, numpy.array(
+                    [40, 180, 240]), numpy.array([100, 210, 255]))
                 is_gold = True if mask[120, 600] == 255 else False
 
                 skill_in_priority_list = False
@@ -877,11 +926,14 @@ def get_skill_list(img, skill: list[str], skill_blacklist: list[str]) -> list:
                         if abs(int(r) - 255) <= 8 and abs(int(g) - 145) <= 8 and abs(int(b) - 28) <= 8:
                             rx1, ry1 = buy_x - 62, buy_y - 71
                             rx2, ry2 = buy_x - 6, buy_y - 50
-                            rx1 = max(0, min(w0, rx1)); rx2 = max(rx1, min(w0, rx2))
-                            ry1 = max(0, min(h0, ry1)); ry2 = max(ry1, min(h0, ry2))
+                            rx1 = max(0, min(w0, rx1))
+                            rx2 = max(rx1, min(w0, rx2))
+                            ry1 = max(0, min(h0, ry1))
+                            ry2 = max(ry1, min(h0, ry2))
                             roi = origin_img[ry1:ry2, rx1:rx2]
                             if roi is not None and getattr(roi, 'size', 0) > 0:
-                                roi_gray = cv2.cvtColor(roi, cv2.COLOR_BGR2GRAY)
+                                roi_gray = cv2.cvtColor(
+                                    roi, cv2.COLOR_BGR2GRAY)
                                 lvl = 0
                                 for i, tpl in enumerate(REF_HINT_LEVELS):
                                     try:
@@ -895,7 +947,8 @@ def get_skill_list(img, skill: list[str], skill_blacklist: list[str]) -> list:
                 except Exception as e:
                     pass
                 normalized_name = normalize_text_for_match(name_for_match)
-                in_blacklist = any(normalized_name == normalize_text_for_match(b) for b in skill_blacklist)
+                in_blacklist = any(normalized_name == normalize_text_for_match(
+                    b) for b in skill_blacklist)
 
                 if in_blacklist:
                     priority = -1
@@ -911,7 +964,8 @@ def get_skill_list(img, skill: list[str], skill_blacklist: list[str]) -> list:
                 if not skill_in_priority_list:
                     priority = len(skill)
 
-                available = not image_match(skill_info_img, REF_SKILL_LEARNED).find_match
+                available = not image_match(
+                    skill_info_img, REF_SKILL_LEARNED).find_match
 
                 if priority != -1:
                     res.append({"skill_name": detected_text,
@@ -927,18 +981,19 @@ def get_skill_list(img, skill: list[str], skill_blacklist: list[str]) -> list:
                 match_result.matched_area[0][0]:match_result.matched_area[1][0]] = 0
             img = img.copy()
 
-
         match_result = image_match(img, REF_SKILL_LEARNED)
         if match_result.find_match:
             all_skill_scanned = False
             pos = match_result.matched_area
             pos_center = match_result.center_point
             if 550 < pos_center[0] < 640 and 450 < pos_center[1] < 1050:
-                skill_info_img = img[pos[0][1] - 65:pos[1][1] + 75, pos[0][0] - 520: pos[1][0] + 150]
-                skill_info_cp = origin_img[pos[0][1] - 65:pos[1][1] + 75, pos[0][0] - 470: pos[1][0] + 150]
+                skill_info_img = img[pos[0][1] - 65:pos[1]
+                                     [1] + 75, pos[0][0] - 520: pos[1][0] + 150]
+                skill_info_cp = origin_img[pos[0][1] - 65:pos[1]
+                                           [1] + 75, pos[0][0] - 470: pos[1][0] + 150]
 
-
-                mask = cv2.inRange(skill_info_cp, numpy.array([40, 180, 240]), numpy.array([100, 210, 255]))
+                mask = cv2.inRange(skill_info_cp, numpy.array(
+                    [40, 180, 240]), numpy.array([100, 210, 255]))
                 is_gold = True if mask[120, 600] == 255 else False
                 skill_name_img = skill_info_img[10: 47, 100: 445]
                 detected_text = ocr_line(skill_name_img)
@@ -972,19 +1027,22 @@ def parse_factor(ctx: UmamusumeContext):
         if match_result.find_match:
             factor_info = ['unknown', 0]
             pos = match_result.matched_area
-            factor_info_img_gray = img[pos[0][1] - 20:pos[1][1] + 25, pos[0][0] - 630: pos[1][0] - 25]
-            factor_info_img = origin_img[pos[0][1] - 20:pos[1][1] + 25, pos[0][0] - 630: pos[1][0] - 25]
+            factor_info_img_gray = img[pos[0][1] - 20:pos[1]
+                                       [1] + 25, pos[0][0] - 630: pos[1][0] - 25]
+            factor_info_img = origin_img[pos[0][1] - 20:pos[1]
+                                         [1] + 25, pos[0][0] - 630: pos[1][0] - 25]
             factor_name_sub_img = factor_info_img_gray[15: 60, 45:320]
             factor_name = ocr_line(factor_name_sub_img)
             factor_level = 0
-            factor_level_check_point = [factor_info_img[35, 535], factor_info_img[35, 565], factor_info_img[35, 595]]
+            factor_level_check_point = [
+                factor_info_img[35, 535], factor_info_img[35, 565], factor_info_img[35, 595]]
             for i in range(len(factor_level_check_point)):
                 if not compare_color_equal(factor_level_check_point[i], [223, 227, 237]):
                     factor_level += 1
                 else:
                     break
             img[match_result.matched_area[0][1]:match_result.matched_area[1][1],
-            match_result.matched_area[0][0]:match_result.matched_area[1][0]] = 0
+                match_result.matched_area[0][0]:match_result.matched_area[1][0]] = 0
             img = img.copy()
             factor_info[0] = factor_name
             factor_info[1] = factor_level
@@ -993,5 +1051,3 @@ def parse_factor(ctx: UmamusumeContext):
             break
     ctx.cultivate_detail.parse_factor_done = True
     ctx.task.detail.cultivate_result['factor_list'] = factor_list
-
-
